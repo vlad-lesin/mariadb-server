@@ -354,6 +354,7 @@ get_mysql_vars(MYSQL *connection)
 	char *innodb_undo_directory_var = NULL;
 	char *innodb_page_size_var = NULL;
 	char *innodb_undo_tablespaces_var = NULL;
+	char *lower_case_table_names_var = NULL;
 	char *endptr;
 	unsigned long server_version = mysql_get_server_version(connection);
 
@@ -383,6 +384,7 @@ get_mysql_vars(MYSQL *connection)
 		{"innodb_undo_directory", &innodb_undo_directory_var},
 		{"innodb_page_size", &innodb_page_size_var},
 		{"innodb_undo_tablespaces", &innodb_undo_tablespaces_var},
+		{"lower_case_table_names", &lower_case_table_names_var},
 		{NULL, NULL}
 	};
 
@@ -520,6 +522,8 @@ get_mysql_vars(MYSQL *connection)
 		ut_ad(*endptr == 0);
 	}
 
+	DBUG_ASSERT(lower_case_table_names_var);
+	lower_case_table_names = (uint)strtoul(lower_case_table_names_var,&endptr, 10);
 out:
 	free_mysql_variables(mysql_vars);
 
@@ -1667,6 +1671,7 @@ bool write_backup_config_file()
 		"innodb_page_size=%lu\n"
 		"innodb_undo_directory=%s\n"
 		"innodb_undo_tablespaces=%lu\n"
+		"lower_case_table_names=%u\n"
 		"%s%s\n"
 		"%s\n",
 		innodb_checksum_algorithm_names[srv_checksum_algorithm],
@@ -1676,6 +1681,7 @@ bool write_backup_config_file()
 		srv_page_size,
 		srv_undo_dir,
 		srv_undo_tablespaces,
+		lower_case_table_names,
 		innobase_buffer_pool_filename ?
 			"innodb_buffer_pool_filename=" : "",
 		innobase_buffer_pool_filename ?

@@ -837,7 +837,8 @@ enum options_xtrabackup
   OPT_LOCK_DDL_PER_TABLE,
   OPT_ROCKSDB_DATADIR,
   OPT_BACKUP_ROCKSDB,
-  OPT_XTRA_CHECK_PRIVILEGES
+  OPT_XTRA_CHECK_PRIVILEGES,
+  OPT_LOWER_CASE_TABLE_NAMES
 };
 
 struct my_option xb_client_options[] =
@@ -1354,6 +1355,11 @@ struct my_option xb_server_options[] =
    (G_PTR*)&srv_undo_tablespaces, (G_PTR*)&srv_undo_tablespaces,
    0, GET_ULONG, REQUIRED_ARG, 0, 0, 126, 0, 1, 0},
 
+  { "lower_case_table_names", OPT_LOWER_CASE_TABLE_NAMES,
+    "server's lower-case-table-names setting (used only with --prepare)",
+    (G_PTR*)&lower_case_table_names, (G_PTR*)&lower_case_table_names,
+    0, GET_UINT, REQUIRED_ARG, 0, 0, 2, 0, 0, 0 },
+
   {"defaults_group", OPT_DEFAULTS_GROUP, "defaults group in config file (default \"mysqld\").",
    (G_PTR*) &defaults_group, (G_PTR*) &defaults_group,
    0, GET_STR, REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
@@ -1459,7 +1465,7 @@ debug_sync_point(const char *name)
 }
 
 
-static std::vector<std::string> tables_for_export;
+static std::set<std::string> tables_for_export;
 
 static void append_export_table(const char *dbname, const char *tablename, bool is_remote)
 {
@@ -1471,7 +1477,15 @@ static void append_export_table(const char *dbname, const char *tablename, bool 
     char *p=strrchr(buf, '.');
     if (p) *p=0;
 
-    tables_for_export.push_back(ut_get_name(0,buf));
+    std::string name=ut_get_name(0, buf);
+    /* Strip partition name comment from table name, if any */
+    if (ends_with(name.c_str(), "*/"))
+    {
+      size_t pos= name.rfind("/*");
+      if (pos != std::string::npos)
+         name.resize(pos);
+    }
+    tables_for_export.insert(name);
   }
 }
 
@@ -1486,9 +1500,10 @@ static int create_bootstrap_file()
 
   fputs("SET NAMES UTF8;\n",f);
   enumerate_ibd_files(append_export_table);
-  for (size_t i= 0; i < tables_for_export.size(); i++)
+  for (std::set<std::string>::iterator it = tables_for_export.begin();
+       it != tables_for_export.end(); it++)
   {
-     const char *tab = tables_for_export[i].c_str();
+     const char *tab = it->c_str();
      fprintf(f,
      "BEGIN NOT ATOMIC "
        "DECLARE CONTINUE HANDLER FOR NOT FOUND,SQLEXCEPTION BEGIN END;"
@@ -1518,7 +1533,7 @@ static int prepare_export()
     snprintf(cmdline, sizeof cmdline,
      IF_WIN("\"","") "\"%s\" --mysqld \"%s\" "
       " --defaults-extra-file=./backup-my.cnf --defaults-group-suffix=%s --datadir=."
-      " --innodb --innodb-fast-shutdown=0"
+      " --innodb --innodb-fast-shutdown=0 --loose-partition"
       " --innodb_purge_rseg_truncate_frequency=1 --innodb-buffer-pool-size=%llu"
       " --console  --skip-log-error --bootstrap  < "  BOOTSTRAP_FILENAME IF_WIN("\"",""),
       mariabackup_exe, 
@@ -1530,7 +1545,7 @@ static int prepare_export()
     sprintf(cmdline,
      IF_WIN("\"","") "\"%s\" --mysqld"
       " --defaults-file=./backup-my.cnf --defaults-group-suffix=%s --datadir=."
-      " --innodb --innodb-fast-shutdown=0"
+      " --innodb --innodb-fast-shutdown=0 --loose-partition"
       " --innodb_purge_rseg_truncate_frequency=1 --innodb-buffer-pool-size=%llu"
       " --console  --log-error= --bootstrap  < "  BOOTSTRAP_FILENAME IF_WIN("\"",""),
       mariabackup_exe,

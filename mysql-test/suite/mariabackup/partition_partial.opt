@@ -1,0 +1,1 @@
+--innodb --loose-partition --lower-case-table-names=1
