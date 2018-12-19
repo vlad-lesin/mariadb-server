@@ -5856,7 +5856,6 @@ check_all_privileges()
 	mysql_free_result(result);
 
 	int check_result = PRIVILEGE_OK;
-	bool reload_checked = false;
 
 	/* FLUSH TABLES WITH READ LOCK */
 	if (!opt_no_lock)
@@ -5864,7 +5863,6 @@ check_all_privileges()
 		check_result |= check_privilege(
 			granted_privileges,
 			"RELOAD", "*", "*");
-		reload_checked = true;
 	}
 
 	if (!opt_no_lock)

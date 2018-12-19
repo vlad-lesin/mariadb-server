@@ -7,15 +7,7 @@ PARTITION p4 VALUES LESS THAN (400));
 INSERT INTO t1 VALUES (1), (101), (201), (301);
 # xtrabackup backup
 INSERT INTO t1 VALUES (1), (101), (201), (301);
-t1#p#p1.ibd
-t1#p#p2.ibd
-t1#p#p3.ibd
-t1#p#p4.ibd
 # xtrabackup prepare
-t1#p#p1.cfg
-t1#p#p2.cfg
-t1#p#p3.cfg
-t1#p#p4.cfg
 CREATE TABLE t1_placeholder (i INT) ENGINE INNODB;
 ALTER TABLE t1_placeholder DISCARD TABLESPACE;
 ALTER TABLE t1_placeholder IMPORT TABLESPACE;
