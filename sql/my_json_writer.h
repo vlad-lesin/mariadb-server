@@ -268,16 +268,16 @@ public:
     context.add_bool(value);
     return *this;
   }
-  Json_writer_object& add(const char* name, uint value)
+  Json_writer_object& add(const char *name, uint value)
   {
     add_member(name);
-    context.add_ll(value);
+    context.add_ll(static_cast<longlong>(value));
     return *this;
   }
-  Json_writer_object& add(const char* name, ha_rows value)
+  Json_writer_object& add(const char *name, ulonglong value)
   {
     add_member(name);
-    context.add_ll(value);
+    context.add_ll(static_cast<longlong>(value));
     return *this;
   }
   Json_writer_object& add(const char *name, longlong value)
@@ -295,7 +295,7 @@ public:
   Json_writer_object& add(const char *name, size_t value)
   {
     add_member(name);
-    context.add_ll(value);
+    context.add_ll(static_cast<longlong>(value));
     return *this;
   }
   Json_writer_object& add(const char *name, const char *value)
@@ -340,6 +340,15 @@ public:
     context.add_table_name(tab);
     return *this;
   }
+  Json_writer_object& add_select_number(uint select_number)
+  {
+    add_member("select_id");
+    if (unlikely(select_number >= INT_MAX))
+      context.add_str("fake");
+    else
+      context.add_ll(select_number);
+    return *this;
+  }
   void end()
   {
     if (my_writer)
@@ -371,12 +380,12 @@ public:
   }
   Json_writer_array& add(uint value)
   {
-    context.add_ll(value);
+    context.add_ll(static_cast<longlong>(value));
     return *this;
   }
-  Json_writer_array& add(ha_rows value)
+  Json_writer_array& add(ulonglong value)
   {
-    context.add_ll(value);
+    context.add_ll(static_cast<longlong>(value));
     return *this;
   }
   Json_writer_array& add(longlong value)

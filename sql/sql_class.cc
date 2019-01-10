@@ -68,6 +68,7 @@
 #include "wsrep_mysqld.h"
 #include "wsrep_thd.h"
 #include "sql_connect.h"
+#include "opt_trace.h"
 
 #ifdef HAVE_SYS_SYSCALL_H
 #include <sys/syscall.h>
@@ -1380,6 +1381,7 @@ void THD::change_user(void)
   sp_cache_clear(&sp_func_cache);
   sp_cache_clear(&sp_package_spec_cache);
   sp_cache_clear(&sp_package_body_cache);
+  opt_trace.flush_optimizer_trace();
 }
 
 /**
@@ -4302,6 +4304,13 @@ bool Security_context::set_user(char *user_arg)
   my_free((char*) user);
   user= my_strdup(user_arg, MYF(0));
   return user == 0;
+}
+
+bool Security_context::check_access(ulong want_access, bool match_any)
+{
+  DBUG_ENTER("Security_context::check_access");
+  DBUG_RETURN((match_any ? (master_access & want_access)
+                         : ((master_access & want_access) == want_access)));
 }
 
 #ifndef NO_EMBEDDED_ACCESS_CHECKS
