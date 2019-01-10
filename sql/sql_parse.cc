@@ -100,6 +100,7 @@
 #include "set_var.h"
 #include "sql_bootstrap.h"
 #include "sql_sequence.h"
+#include "opt_trace.h"
 
 #include "my_json_writer.h" 
 
@@ -3421,6 +3422,14 @@ mysql_execute_command(THD *thd)
 #ifdef HAVE_REPLICATION
   } /* endif unlikely slave */
 #endif
+  Opt_trace_start ots(thd, all_tables, lex->sql_command, &lex->var_list,
+                      thd->query(), thd->query_length(),
+                      thd->variables.character_set_client);
+
+  Json_writer *writer= thd->opt_trace.get_current_json();
+  Json_writer_object trace_command(writer);
+  Json_writer_array trace_command_steps(writer, "steps");
+
 #ifdef WITH_WSREP
   if  (wsrep && WSREP(thd))
   {
