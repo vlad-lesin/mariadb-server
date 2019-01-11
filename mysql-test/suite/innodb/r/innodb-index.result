@@ -483,7 +483,7 @@ change b beta int not null, change c charlie int not null;
 ERROR HY000: Column 'b' cannot be NOT NULL: needed in a foreign key constraint 'test/t2_ibfk_1' SET NULL
 alter table t2 add primary key (alpha), change a alpha int,
 change c charlie int not null, change d delta int not null;
-ERROR HY000: Column 'd' cannot be NOT NULL: needed in a foreign key constraint 'test/t2_ibfk_3' SET NULL
+ERROR HY000: Cannot drop index 'dc': needed in a foreign key constraint
 alter table t2 add primary key (alpha), change a alpha int,
 change b beta int, modify c int not null;
 affected rows: 0

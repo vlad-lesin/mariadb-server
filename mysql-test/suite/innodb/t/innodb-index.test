@@ -206,7 +206,7 @@ set @@sql_mode = 'STRICT_TRANS_TABLES';
 --error ER_FK_COLUMN_NOT_NULL
 alter table t2 add primary key (alpha), change a alpha int,
 change b beta int not null, change c charlie int not null;
---error ER_FK_COLUMN_NOT_NULL
+--error ER_DROP_INDEX_FK
 alter table t2 add primary key (alpha), change a alpha int,
 change c charlie int not null, change d delta int not null;
 alter table t2 add primary key (alpha), change a alpha int,

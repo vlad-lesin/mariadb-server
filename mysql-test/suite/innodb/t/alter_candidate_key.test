@@ -1,0 +1,53 @@
+--source include/have_innodb.inc
+--source include/have_debug.inc
+--source include/have_debug_sync.inc
+
+CREATE TABLE t1 (f1 INT NOT NULL, f2 INT NOT NULL,
+  UNIQUE KEY uidx2(f1,f2),
+  UNIQUE KEY uidx1(f2)
+) ENGINE=InnoDB;
+
+INSERT INTO t1 VALUES(1, 1);
+SHOW CREATE TABLE t1;
+
+SET DEBUG_SYNC = 'innodb_inplace_alter_table_enter SIGNAL conc_dml WAIT_FOR go_ahead';
+--send
+alter table t1 change column f1 f11 int, algorithm=inplace;
+connect (con1,localhost,root,,);
+SET DEBUG_SYNC = 'now WAIT_FOR conc_dml';
+DELETE FROM t1;
+SET DEBUG_SYNC = 'now SIGNAL go_ahead';
+connection default;
+reap;
+SHOW CREATE TABLE t1;
+
+CHECK TABLE t1;
+DROP TABLE t1;
+
+CREATE TABLE t1(f1 INT, f2 INT,
+		PRIMARY KEY(f1, f2),
+		UNIQUE INDEX uidx2 (f1, f2),
+		UNIQUE INDEX uidx1 (f2))ENGINE=InnoDB;
+ALTER TABLE t1 DROP PRIMARY KEY;
+SHOW CREATE TABLE t1;
+SET DEBUG_SYNC = 'innodb_inplace_alter_table_enter SIGNAL conc_dml WAIT_FOR go_ahead';
+--send
+ALTER TABLE t1 CHANGE COLUMN f1 f11 INT, ALGORITHM=INPLACE;
+connection con1;
+SET DEBUG_SYNC = 'now WAIT_FOR conc_dml';
+--error ER_DUP_ENTRY
+INSERT INTO t1 VALUES(1, 1), (1, 1);
+SET DEBUG_SYNC = 'now SIGNAL go_ahead';
+disconnect con1;
+connection default;
+reap;
+SHOW CREATE TABLE t1;
+CHECK TABLE t1;
+DROP TABLE t1;
+SET DEBUG_SYNC="RESET";
+
+CREATE TABLE t1(f1 INT NOT NULL, f2 INT NOT NULL, PRIMARY KEY(f1, f2),
+		UNIQUE KEY(f2))ENGINE=InnoDB;
+ALTER TABLE t1 DROP PRIMARY KEY, ALGORITHM=INPLACE;
+SHOW CREATE TABLE t1;
+DROP TABLE t1;

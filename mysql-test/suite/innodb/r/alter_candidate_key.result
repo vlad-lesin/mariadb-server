@@ -1,0 +1,73 @@
+CREATE TABLE t1 (f1 INT NOT NULL, f2 INT NOT NULL,
+UNIQUE KEY uidx2(f1,f2),
+UNIQUE KEY uidx1(f2)
+) ENGINE=InnoDB;
+INSERT INTO t1 VALUES(1, 1);
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `f1` int(11) NOT NULL,
+  `f2` int(11) NOT NULL,
+  UNIQUE KEY `uidx2` (`f1`,`f2`),
+  UNIQUE KEY `uidx1` (`f2`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+SET DEBUG_SYNC = 'innodb_inplace_alter_table_enter SIGNAL conc_dml WAIT_FOR go_ahead';
+alter table t1 change column f1 f11 int, algorithm=inplace;
+SET DEBUG_SYNC = 'now WAIT_FOR conc_dml';
+DELETE FROM t1;
+SET DEBUG_SYNC = 'now SIGNAL go_ahead';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `f11` int(11) DEFAULT NULL,
+  `f2` int(11) NOT NULL,
+  UNIQUE KEY `uidx1` (`f2`),
+  UNIQUE KEY `uidx2` (`f11`,`f2`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+CHECK TABLE t1;
+Table	Op	Msg_type	Msg_text
+test.t1	check	status	OK
+DROP TABLE t1;
+CREATE TABLE t1(f1 INT, f2 INT,
+PRIMARY KEY(f1, f2),
+UNIQUE INDEX uidx2 (f1, f2),
+UNIQUE INDEX uidx1 (f2))ENGINE=InnoDB;
+ALTER TABLE t1 DROP PRIMARY KEY;
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `f1` int(11) NOT NULL DEFAULT '0',
+  `f2` int(11) NOT NULL DEFAULT '0',
+  UNIQUE KEY `uidx2` (`f1`,`f2`),
+  UNIQUE KEY `uidx1` (`f2`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+SET DEBUG_SYNC = 'innodb_inplace_alter_table_enter SIGNAL conc_dml WAIT_FOR go_ahead';
+ALTER TABLE t1 CHANGE COLUMN f1 f11 INT, ALGORITHM=INPLACE;
+SET DEBUG_SYNC = 'now WAIT_FOR conc_dml';
+INSERT INTO t1 VALUES(1, 1), (1, 1);
+ERROR 23000: Duplicate entry '1-1' for key 'uidx2'
+SET DEBUG_SYNC = 'now SIGNAL go_ahead';
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `f11` int(11) DEFAULT NULL,
+  `f2` int(11) NOT NULL DEFAULT '0',
+  UNIQUE KEY `uidx1` (`f2`),
+  UNIQUE KEY `uidx2` (`f11`,`f2`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+CHECK TABLE t1;
+Table	Op	Msg_type	Msg_text
+test.t1	check	status	OK
+DROP TABLE t1;
+SET DEBUG_SYNC="RESET";
+CREATE TABLE t1(f1 INT NOT NULL, f2 INT NOT NULL, PRIMARY KEY(f1, f2),
+UNIQUE KEY(f2))ENGINE=InnoDB;
+ALTER TABLE t1 DROP PRIMARY KEY, ALGORITHM=INPLACE;
+SHOW CREATE TABLE t1;
+Table	Create Table
+t1	CREATE TABLE `t1` (
+  `f1` int(11) NOT NULL,
+  `f2` int(11) NOT NULL,
+  UNIQUE KEY `f2` (`f2`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+DROP TABLE t1;

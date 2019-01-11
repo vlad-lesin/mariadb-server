@@ -6168,6 +6168,8 @@ static bool fill_alter_inplace_info(THD *thd,
   KEY_PART_INFO *key_part, *new_part;
   KEY_PART_INFO *end;
   uint candidate_key_count= 0;
+  uint old_candidate_key_count= 0, new_candidate_key_count= 0;
+  bool is_old_pk_exist= false, is_new_pk_exist= false;
   Alter_info *alter_info= ha_alter_info->alter_info;
   DBUG_ENTER("fill_alter_inplace_info");
 
@@ -6448,6 +6450,31 @@ static bool fill_alter_inplace_info(THD *thd,
   */
   ha_alter_info->index_drop_count= 0;
   ha_alter_info->index_add_count= 0;
+
+  for (new_key= ha_alter_info->key_info_buffer;
+       new_key < new_key_end;
+       new_key++)
+  {
+    if (new_key->flags & HA_NOSAME)
+      is_new_pk_exist= !my_strcasecmp(
+        system_charset_info, new_key->name, primary_key_name);
+
+   if (is_new_pk_exist)
+     break;
+  }
+
+  for (table_key= table->key_info;
+       table_key < table_key_end;
+       table_key++)
+  {
+     if (table_key->flags & HA_NOSAME)
+       is_old_pk_exist= !my_strcasecmp(
+	 system_charset_info, table_key->name, primary_key_name);
+
+     if (is_old_pk_exist)
+       break;
+  }
+
   for (table_key= table->key_info; table_key < table_key_end; table_key++)
   {
     /* Search a new key with the same name. */
@@ -6477,6 +6504,26 @@ static bool fill_alter_inplace_info(THD *thd,
       goto index_changed;
 
     if (table_key->block_size != new_key->block_size)
+      goto index_changed;
+
+    if (is_candidate_key(table_key))
+      old_candidate_key_count++;
+
+    if (is_candidate_key(new_key))
+      new_candidate_key_count++;
+
+    /*
+	The index has to go through rebuild if one of the following
+	satisfied:
+	(i) If there is a change in candidate key then rebuild the index.
+
+	(ii) If the unique key is being nominated as PK if the existing
+	pk is dropped or existing pk candidate key is changed.
+    */
+    if (is_candidate_key(table_key) != is_candidate_key(new_key))
+      goto index_changed;
+    else if (new_candidate_key_count == 1 && !is_new_pk_exist
+             && (is_old_pk_exist || old_candidate_key_count > 1))
       goto index_changed;
 
     if (engine_options_differ(table_key->option_struct, new_key->option_struct,
