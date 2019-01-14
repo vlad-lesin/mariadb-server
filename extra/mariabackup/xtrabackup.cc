@@ -2382,6 +2382,18 @@ check_if_skip_table(
 	const char *ptr;
 	char *eptr;
 
+
+	dbname = NULL;
+	tbname = name;
+	while ((ptr = strchr(tbname, '/')) != NULL) {
+		dbname = tbname;
+		tbname = ptr + 1;
+	}
+
+	if (strncmp(tbname, "#sql",4) == 0) {
+		return TRUE;
+	}
+
 	if (regex_exclude_list.empty() &&
 		regex_include_list.empty() &&
 		tables_include_hash == NULL &&
@@ -2389,13 +2401,6 @@ check_if_skip_table(
 		databases_include_hash == NULL &&
 		databases_exclude_hash == NULL) {
 		return(FALSE);
-	}
-
-	dbname = NULL;
-	tbname = name;
-	while ((ptr = strchr(tbname, '/')) != NULL) {
-		dbname = tbname;
-		tbname = ptr + 1;
 	}
 
 	if (dbname == NULL) {
