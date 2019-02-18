@@ -2728,11 +2728,17 @@ static bool xtrabackup_copy_logfile(bool last = false)
 		lsn_t lsn= start_lsn;
 		for (int retries= 0; retries < 100; retries++) {
 			if (log_sys.log.read_log_seg(&lsn, end_lsn)
-			    || lsn != start_lsn) {
+			    && lsn != start_lsn) {
 				break;
 			}
 			msg("Retrying read of log at LSN=" LSN_PF "\n", lsn);
 			my_sleep(1000);
+		}
+
+		if (recv_sys->found_corrupt_log) {
+			msg("mariabackup: Error: xtrabackup_copy_logfile()"
+					" found corrupted log.\n");
+			exit(EXIT_FAILURE);
 		}
 
 		start_lsn = (lsn == start_lsn)
