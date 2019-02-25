@@ -245,11 +245,14 @@ Sql_cmd_truncate_table::handler_truncate(THD *thd, TABLE_LIST *table_ref,
 
   if (!is_tmp_table && !error)
   {
+    const char *storage_engine_ptr;
     backup_log_info ddl_log;
     bzero(&ddl_log, sizeof(ddl_log));
     ddl_log.query= { C_STRING_WITH_LEN("TRUNCATE") };
-    lex_string_set(&ddl_log.org_storage_engine_name,
-                   table->file->table_type());
+    ddl_log.org_partitioned=
+      table->file->partition_engine_name(&storage_engine_ptr);
+    lex_string_set(&ddl_log.org_storage_engine_name, storage_engine_ptr);
+
     ddl_log.org_database=     table->s->db;
     ddl_log.org_table=        table->s->table_name;
     ddl_log.org_table_id=     table->s->tabledef_version;
@@ -333,8 +336,8 @@ bool Sql_cmd_truncate_table::lock_table(THD *thd, TABLE_LIST *table_ref,
                          thd->variables.lock_wait_timeout, 0))
       DBUG_RETURN(TRUE);
 
-    if (!ha_table_exists(thd, &table_ref->db, &table_ref->table_name, NULL,
-                         &hton, &is_sequence) ||
+    if (!ha_table_exists(thd, &table_ref->db, &table_ref->table_name,
+      NULL, NULL, &hton, &is_sequence) ||
         hton == view_pseudo_hton)
     {
       my_error(ER_NO_SUCH_TABLE, MYF(0), table_ref->db.str,

@@ -402,6 +402,8 @@ void ha_partition::init_handler_variables()
 
 const char *ha_partition::table_type() const
 {
+  DBUG_ASSERT(m_file);
+  DBUG_ASSERT(m_file[0]);
   // we can do this since we only support a single engine type
   return m_file[0]->table_type();
 }
@@ -3637,6 +3639,11 @@ int ha_partition::open(const char *name, int mode, uint test_if_locked)
     being opened once.
   */
   clear_handler_file();
+
+  DBUG_ASSERT(part_share);
+  lock_shared_ha_data();
+  part_share->partition_engine_name= table_type();
+  unlock_shared_ha_data();
 
   /*
     Some handlers update statistics as part of the open call. This will in

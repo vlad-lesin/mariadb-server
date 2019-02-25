@@ -13,33 +13,45 @@ perl;
   while(<FILE>)
   {
     chop;
-    if (/([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)/)
+    if (/([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)[\t]([^\t]*)/)
     {
+      my $date = $1;
+      my $query = $2;
+      my $storage = $3;
+      my $partitioned = $4;
+      my $db = $5;
+      my $table = $6;
+      my $table_ver = $7;
+      my $new_storage = $8;
+      my $new_partitioned = $9;
+      my $new_db = $10;
+      my $new_table = $11;
+      my $new_table_ver = $12;
       # Fix table ids
       $table_id1= "";
       $table_id2= "";
-      if (!($6 eq ""))
+      if (!($table_ver eq ""))
       {
-        $table_id1= "id: $id{$6}";
-        if (!exists($id{$6}))
+        $table_id1= "id: $id{$table_ver}";
+        if (!exists($id{$table_ver}))
         {
           $id_count++;
           $table_id1= "id: $id_count";
-          $id{$6}= $id_count;
+          $id{$table_ver}= $id_count;
         }
       }
-      if (!($10 eq ""))
+      if (!($new_table_ver eq ""))
       {
-        $table_id2= "id: $id{$10}";
-        if (!exists($id{$10}))
+        $table_id2= "id: $id{$new_table_ver}";
+        if (!exists($id{$new_table_ver}))
         {
           $id_count++;
           $table_id2= "id: $id_count";
-          $id{$10}= $id_count;
+          $id{$new_table_ver}= $id_count;
         }
       }
       # Fix table names
-      $table_name1= $5;
+      $table_name1= $table;
       if (substr($table_name1,0,5) eq '@0023')
       {
         if (!exists($name{$table_name1}))
@@ -49,7 +61,7 @@ perl;
         }
         $table_name1= $name{$table_name1};
       }
-      $table_name2= $9;
+      $table_name2= $new_table;
       if (substr($table_name2,0,5) eq '@0023')
       {
         if (!exists($name{$table_name2}))
@@ -60,7 +72,7 @@ perl;
         $table_name2= $name{$table_name2};
       }
 
-      print "$2,$3,$4,$table_name1,$table_id1,$7,$8,$table_name2,$table_id2\n";
+      print "$query,$storage,$partitioned,$db,$table_name1,$table_id1,$new_storage,$new_partitioned,$new_db,$table_name2,$table_id2\n";
     }
   }
 EOF

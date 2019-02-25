@@ -98,12 +98,14 @@ public:
   */
   bool partition_name_hash_initialized;
   HASH partition_name_hash;
+  const char *partition_engine_name;
   /** Storage for each partitions Handler_share */
   Parts_share_refs partitions_share_refs;
   Partition_share()
     : auto_inc_initialized(false),
     next_auto_inc_val(0),
     partition_name_hash_initialized(false),
+    partition_engine_name(NULL),
     partition_names(NULL)
   {
     mysql_mutex_init(key_partition_auto_inc_mutex,

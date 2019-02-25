@@ -246,6 +246,7 @@ int mysql_rm_table_no_locks(THD *thd, TABLE_LIST *tables, bool if_exists,
                             bool log_query, bool dont_free_locks);
 bool log_drop_table(THD *thd, const LEX_CSTRING *db_name,
                     const LEX_CSTRING *table_name, const LEX_CSTRING *handler,
+                    bool partitioned,
                     const LEX_CUSTRING *id, bool temporary_table);
 bool quick_rm_table(THD *thd, handlerton *base, const LEX_CSTRING *db,
                     const LEX_CSTRING *table_name, uint flags,

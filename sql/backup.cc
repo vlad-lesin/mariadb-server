@@ -483,6 +483,12 @@ static char *add_id_to_buffer(char *ptr, LEX_CUSTRING *from)
 }
 
 
+static char *add_bool_to_buffer(char *ptr, bool value) {
+  *(ptr++) = value ? '1' : '0';
+  *(ptr++) = '\t';
+  return ptr;
+}
+
 /*
   Write to backup log
 
@@ -514,12 +520,14 @@ void backup_log_ddl(backup_log_info *info)
 
     ptr= add_str_to_buffer(ptr,  &info->query);
     ptr= add_str_to_buffer(ptr,  &info->org_storage_engine_name);
+    ptr= add_bool_to_buffer(ptr, info->org_partitioned);
     ptr= add_name_to_buffer(ptr, &info->org_database);
     ptr= add_name_to_buffer(ptr, &info->org_table);
     ptr= add_id_to_buffer(ptr,   &info->org_table_id);
 
     /* The following fields are only set in case of rename */
     ptr= add_str_to_buffer(ptr,  &info->new_storage_engine_name);
+    ptr= add_bool_to_buffer(ptr, info->new_partitioned);
     ptr= add_name_to_buffer(ptr, &info->new_database);
     ptr= add_name_to_buffer(ptr, &info->new_table);
     ptr= add_id_to_buffer(ptr,   &info->new_table_id);

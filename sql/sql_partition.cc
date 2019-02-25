@@ -7016,12 +7016,19 @@ bool log_partition_alter_to_ddl_log(ALTER_PARTITION_PARAM_TYPE *lpt)
 {
   backup_log_info ddl_log;
   bzero(&ddl_log, sizeof(ddl_log));
+  const char* engine=
+    static_cast<ha_partition *>(lpt->table->file)->table_type();
+  LEX_CSTRING old_engine_lex;
+  old_engine_lex.str = engine;
+  old_engine_lex.length = strlen(engine);
   ddl_log.query=                   { C_STRING_WITH_LEN("ALTER") };
-  ddl_log.org_storage_engine_name= { C_STRING_WITH_LEN("partition") };
+  ddl_log.org_storage_engine_name= old_engine_lex;
+  ddl_log.org_partitioned= true;
   ddl_log.org_database=            lpt->db;
   ddl_log.org_table=               lpt->table_name;
   ddl_log.org_table_id=            lpt->org_tabledef_version;
-  ddl_log.new_storage_engine_name= { C_STRING_WITH_LEN("partition") };
+  ddl_log.new_storage_engine_name= old_engine_lex;
+  ddl_log.new_partitioned= true;
   ddl_log.new_database=            lpt->db;
   ddl_log.new_table=               lpt->table_name;
   ddl_log.new_table_id=            lpt->create_info->tabledef_version;

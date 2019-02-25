@@ -294,12 +294,14 @@ public:
   LEX_CSTRING  db;
   LEX_CSTRING  table_name;
   LEX_CSTRING  storage_engine_name;
+  bool storage_engine_partitioned;
   LEX_CSTRING  alias;
   LEX_CSTRING  new_db;
   LEX_CSTRING  new_name;
   LEX_CSTRING  new_alias;
   LEX_CSTRING  tmp_name;
   LEX_CSTRING  tmp_storage_engine_name;
+  bool tmp_storage_engine_name_partitioned;
   LEX_CUSTRING tmp_id, id;
   char         tmp_buff[80];
   uchar        id_buff[MY_UUID_SIZE];

@@ -4661,7 +4661,11 @@ bool select_create::send_eof()
     backup_log_info ddl_log;
     bzero(&ddl_log, sizeof(ddl_log));
     ddl_log.query= { C_STRING_WITH_LEN("CREATE") };
-    lex_string_set(&ddl_log.org_storage_engine_name,
+    if ( (ddl_log.org_partitioned = (create_info->db_type == partition_hton)) )
+      ddl_log.org_storage_engine_name=
+        create_info->new_storage_engine_name;
+    else
+      lex_string_set(&ddl_log.org_storage_engine_name,
                    ha_resolve_storage_engine_name(create_info->db_type));
     ddl_log.org_database=   create_table->db;
     ddl_log.org_table=      create_table->table_name;
@@ -4786,6 +4790,7 @@ void select_create::abort_result_set()
         /* Original table was deleted. We have to log it */
         log_drop_table(thd, &create_table->db, &create_table->table_name,
                        &create_info->org_storage_engine_name,
+                       create_info->db_type == partition_hton,
                        &create_info->tabledef_version,
                        tmp_table);
       }
@@ -4796,6 +4801,8 @@ void select_create::abort_result_set()
           backup_log_info ddl_log;
           bzero(&ddl_log, sizeof(ddl_log));
           ddl_log.query= { C_STRING_WITH_LEN("DROP_AFTER_CREATE") };
+          if (create_info->db_type == partition_hton)
+            ddl_log.org_partitioned= true;
           ddl_log.org_storage_engine_name= create_info->org_storage_engine_name;
           ddl_log.org_database=     create_table->db;
           ddl_log.org_table=        create_table->table_name;

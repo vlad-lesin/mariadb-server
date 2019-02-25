@@ -285,8 +285,8 @@ do_rename(THD *thd, TABLE_LIST *ren_table, const LEX_CSTRING *new_db,
     DBUG_RETURN(1);                     // This can't be skipped
   }
 
-  if (ha_table_exists(thd, &ren_table->db, &old_alias, &old_version, &hton) &&
-      hton)
+  if (ha_table_exists(thd, &ren_table->db, &old_alias, &old_version,
+    NULL, &hton) && hton)
   {
     DBUG_ASSERT(!thd->locked_tables_mode);
     tdc_remove_table(thd, TDC_RT_REMOVE_ALL,

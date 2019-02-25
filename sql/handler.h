@@ -4673,6 +4673,7 @@ public:
   /* XXX to be removed, see ha_partition::partition_ht() */
   virtual handlerton *partition_ht() const
   { return ht; }
+  bool partition_engine_name(const char **out_engine_name);
   inline int ha_write_tmp_row(uchar *buf);
   inline int ha_delete_tmp_row(uchar *buf);
   inline int ha_update_tmp_row(const uchar * old_data, uchar * new_data);
@@ -4821,6 +4822,7 @@ int ha_discover_table_names(THD *thd, LEX_CSTRING *db, MY_DIR *dirp,
 bool ha_table_exists(THD *thd, const LEX_CSTRING *db,
                      const LEX_CSTRING *table_name,
                      LEX_CUSTRING *table_version= 0,
+                     LEX_CSTRING *partition_engine_name= 0,
                      handlerton **hton= 0, bool *is_sequence= 0);
 #endif
 

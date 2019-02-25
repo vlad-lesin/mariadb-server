@@ -267,6 +267,7 @@ Alter_table_ctx::Alter_table_ctx(THD *thd, TABLE_LIST *table_list,
     fk_error_table(NULL),
     tmp_table(false)
 {
+  const char *engine_name_ptr;
   /*
     Assign members db, table_name, new_db and new_name
     to simplify further comparisions: we want to see if it's a RENAME
@@ -348,9 +349,11 @@ Alter_table_ctx::Alter_table_ctx(THD *thd, TABLE_LIST *table_list,
   if ((id.length= table_list->table->s->tabledef_version.length))
     memcpy(id_buff, table_list->table->s->tabledef_version.str, MY_UUID_SIZE);
   id.str= id_buff;
+  storage_engine_partitioned=
+    table_list->table->file->partition_engine_name(&engine_name_ptr);
   storage_engine_name.str= storage_engine_buff;
   storage_engine_name.length= ((strmake(storage_engine_buff,
-                                        table_list->table->file->table_type(),
+                                        engine_name_ptr,
                                         sizeof(storage_engine_buff)-1)) -
                                storage_engine_buff);
   tmp_storage_engine_name.str= tmp_storage_engine_buff;

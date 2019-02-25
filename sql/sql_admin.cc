@@ -495,6 +495,7 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
   {
     char table_name[SAFE_NAME_LEN*2+2];
     char storage_engine_name[NAME_LEN];
+    bool storage_engine_partitioned;
     uchar tabledef_version_buff[MY_UUID_SIZE];
     const char *db= table->db.str;
     bool fatal_error=0;
@@ -710,7 +711,10 @@ static bool mysql_admin_table(THD* thd, TABLE_LIST* tables,
                         table->mdl_request.type > MDL_SHARED_WRITE)
     {
       /* Store information about table for ddl log */
-      strmake(storage_engine_name, table->table->file->table_type(),
+      const char *engine_name_ptr;
+      storage_engine_partitioned=
+        table->table->file->partition_engine_name(&engine_name_ptr);
+      strmake(storage_engine_name, engine_name_ptr,
               sizeof(storage_engine_name)-1);
       tabledef_version.str= tabledef_version_buff;
       if ((tabledef_version.length= table->table->s->tabledef_version.length))
@@ -1206,6 +1210,7 @@ send_result_message:
       lex_string_set(&ddl_log.query, operator_name);
       lex_string_set(&ddl_log.org_storage_engine_name,
                      storage_engine_name);
+      ddl_log.org_partitioned= storage_engine_partitioned;
       ddl_log.org_database=     table->db;
       ddl_log.org_table=        table->table_name;
       ddl_log.org_table_id=     tabledef_version;
