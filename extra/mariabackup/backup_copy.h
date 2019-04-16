@@ -13,23 +13,18 @@
 
 extern bool binlog_locked;
 
-bool
-backup_file_printf(const char *filename, const char *fmt, ...)
-		ATTRIBUTE_FORMAT(printf, 2, 0);
+bool backup_file_printf(const char *filename, const char *fmt, ...)
+    ATTRIBUTE_FORMAT(printf, 2, 0);
 
 /************************************************************************
 Return true if first and second arguments are the same path. */
-bool
-equal_paths(const char *first, const char *second);
+bool equal_paths(const char *first, const char *second);
 
 /************************************************************************
 Copy file for backup/restore.
 @return true in case of success. */
-bool
-copy_file(ds_ctxt_t *datasink,
-	  const char *src_file_path,
-	  const char *dst_file_path,
-	  uint thread_n);
+bool copy_file(ds_ctxt_t *datasink, const char *src_file_path,
+               const char *dst_file_path, uint thread_n);
 
 /** Start --backup */
 bool backup_start();
@@ -37,15 +32,10 @@ bool backup_start();
 void backup_release();
 /** Finish after backup_start() and backup_release() */
 bool backup_finish();
-bool
-apply_log_finish();
-bool
-copy_back();
-bool
-decrypt_decompress();
-bool
-is_path_separator(char);
-bool
-directory_exists(const char *dir, bool create);
+bool apply_log_finish();
+bool copy_back();
+bool decrypt_decompress();
+bool is_path_separator(char);
+bool directory_exists(const char *dir, bool create);
 
 #endif

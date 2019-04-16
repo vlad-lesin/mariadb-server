@@ -33,31 +33,30 @@ struct xb_fil_cur_t;
 
 /* The read filter context */
 struct xb_read_filt_ctxt_t {
-	ib_int64_t		offset;		/*!< current file offset */
-	ib_int64_t		data_file_size;	/*!< data file size */
-	size_t		buffer_capacity;/*!< read buffer capacity */
-	space_id_t	space_id;	/*!< space id */
-	/* The following fields used only in bitmap filter */
-	/* Move these to union if any other filters are added in future */
-	xb_page_bitmap_range	*bitmap_range;	/*!< changed page bitmap range
-						iterator for space_id */
-	ulint		page_size;		/*!< page size */
-	ulint		filter_batch_end;/*!< the ending page id of the
-						 current changed page block in
-						 the bitmap */
-	/** TODO: remove this default constructor */
-	xb_read_filt_ctxt_t() : page_size(0) {}
+  ib_int64_t offset;         /*!< current file offset */
+  ib_int64_t data_file_size; /*!< data file size */
+  size_t buffer_capacity;    /*!< read buffer capacity */
+  space_id_t space_id;       /*!< space id */
+  /* The following fields used only in bitmap filter */
+  /* Move these to union if any other filters are added in future */
+  xb_page_bitmap_range *bitmap_range; /*!< changed page bitmap range
+                                      iterator for space_id */
+  ulint page_size;                    /*!< page size */
+  ulint filter_batch_end;             /*!< the ending page id of the
+                                              current changed page block in
+                                              the bitmap */
+  /** TODO: remove this default constructor */
+  xb_read_filt_ctxt_t() : page_size(0) {}
 };
 
 /* The read filter */
 struct xb_read_filt_t {
-	void (*init)(xb_read_filt_ctxt_t* ctxt,
-		     const xb_fil_cur_t* cursor,
-		     ulint space_id);
-	void (*get_next_batch)(xb_read_filt_ctxt_t* ctxt,
-			       ib_int64_t* read_batch_start,
-			       ib_int64_t* read_batch_len);
-	void (*deinit)(xb_read_filt_ctxt_t* ctxt);
+  void (*init)(xb_read_filt_ctxt_t *ctxt, const xb_fil_cur_t *cursor,
+               ulint space_id);
+  void (*get_next_batch)(xb_read_filt_ctxt_t *ctxt,
+                         ib_int64_t *read_batch_start,
+                         ib_int64_t *read_batch_len);
+  void (*deinit)(xb_read_filt_ctxt_t *ctxt);
 };
 
 extern xb_read_filt_t rf_pass_through;

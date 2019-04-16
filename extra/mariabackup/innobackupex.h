@@ -24,22 +24,19 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 #define INNOBACKUPEX_BIN_NAME "innobackupex"
 
 enum ibx_mode_t {
-	IBX_MODE_BACKUP,
-	IBX_MODE_APPLY_LOG,
-	IBX_MODE_COPY_BACK,
-	IBX_MODE_MOVE_BACK,
-	IBX_MODE_DECRYPT_DECOMPRESS
+  IBX_MODE_BACKUP,
+  IBX_MODE_APPLY_LOG,
+  IBX_MODE_COPY_BACK,
+  IBX_MODE_MOVE_BACK,
+  IBX_MODE_DECRYPT_DECOMPRESS
 };
 
 extern ibx_mode_t ibx_mode;
 
-bool
-ibx_handle_options(int *argc, char ***argv);
+bool ibx_handle_options(int *argc, char ***argv);
 
-bool
-ibx_init();
+bool ibx_init();
 
-void
-ibx_cleanup();
+void ibx_cleanup();
 
 #endif

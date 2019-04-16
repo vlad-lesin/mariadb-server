@@ -29,6 +29,6 @@ extern "C"
 extern
 #endif
 
-datasink_t datasink_local;
+    datasink_t datasink_local;
 
 #endif

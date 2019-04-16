@@ -28,18 +28,17 @@ my_regex is used on Windows and native calls are used on POSIX platforms. */
 #include <pcreposix.h>
 #endif
 
-typedef regex_t* xb_regex_t;
+typedef regex_t *xb_regex_t;
 
-#define xb_regex_init() 
+#define xb_regex_init()
 
-#define xb_regexec(preg,string,nmatch,pmatch,eflags) \
-	regexec(preg, string, nmatch, pmatch, eflags)
+#define xb_regexec(preg, string, nmatch, pmatch, eflags) \
+  regexec(preg, string, nmatch, pmatch, eflags)
 
-#define xb_regerror(errcode,preg,errbuf,errbuf_size) \
-	regerror(errcode, preg, errbuf, errbuf_size)
+#define xb_regerror(errcode, preg, errbuf, errbuf_size) \
+  regerror(errcode, preg, errbuf, errbuf_size)
 
-#define xb_regcomp(preg,regex,cflags) \
-	regcomp(preg, regex, cflags)
+#define xb_regcomp(preg, regex, cflags) regcomp(preg, regex, cflags)
 
 #define xb_regfree(preg) regfree(preg)
 
