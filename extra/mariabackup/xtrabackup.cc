@@ -4277,8 +4277,12 @@ fail_before_log_copying_thread_start:
 	log_optimized_ddl_op = backup_optimized_ddl_op;
 	log_truncate = backup_truncate_fail;
 
+	DBUG_MARIABACKUP_EVENT("before_innodb_log_copy_started",0);
+
 	if (xtrabackup_copy_logfile())
 		goto fail_before_log_copying_thread_start;
+
+	DBUG_MARIABACKUP_EVENT("before_innodb_log_copy_thread_started",0);
 
 	log_copying_stop = os_event_create(0);
 	os_thread_create(log_copying_thread, NULL, &log_copying_thread_id);

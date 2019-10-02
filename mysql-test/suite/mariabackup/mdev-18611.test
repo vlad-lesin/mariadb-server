@@ -1,0 +1,36 @@
+--source include/have_innodb.inc
+
+CREATE TABLE t(i INT) ENGINE=INNODB;
+
+INSERT INTO t VALUES
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9),
+  (0), (1), (2), (3), (4), (5), (6), (7), (8), (9);
+--echo # Generate enough data to make one or more loops in innodb redo log
+--echo # after the next "INSERT INTO t SELECT * FROM t" execution.
+--let $i = 0
+while ($i < 8) {
+INSERT INTO t SELECT * FROM t;
+--inc $i
+}
+
+echo # xtrabackup backup;
+let $targetdir=$MYSQLTEST_VARDIR/tmp/backup;
+
+let before_innodb_log_copy_started=INSERT INTO test.t SELECT * FROM test.t;
+let before_innodb_log_copy_thread_started=INSERT INTO test.t SELECT * FROM test.t;
+
+--disable_result_log
+exec $XTRABACKUP --defaults-file=$MYSQLTEST_VARDIR/my.cnf --backup --target-dir=$targetdir --dbug=+d,mariabackup_events;
+--enable_result_log
+
+DROP TABLE t;
+rmdir $targetdir;
+
