@@ -71,6 +71,7 @@ Street, Fifth Floor, Boston, MA 02110-1335 USA
 #include <srv0start.h>
 #include "trx0sys.h"
 #include <buf0dblwr.h>
+#include "ha_innodb.h"
 
 #include <list>
 #include <sstream>
@@ -119,6 +120,8 @@ my_bool xtrabackup_decrypt_decompress;
 my_bool xtrabackup_print_param;
 
 my_bool xtrabackup_export;
+
+my_bool xtrabackup_rollback_xa;
 
 longlong xtrabackup_use_memory;
 
@@ -741,6 +744,7 @@ enum options_xtrabackup
   OPT_XTRA_BACKUP,
   OPT_XTRA_PREPARE,
   OPT_XTRA_EXPORT,
+  OPT_XTRA_ROLLBACK_XA,
   OPT_XTRA_PRINT_PARAM,
   OPT_XTRA_USE_MEMORY,
   OPT_XTRA_THROTTLE,
@@ -854,6 +858,11 @@ struct my_option xb_client_options[] =
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"export", OPT_XTRA_EXPORT, "create files to import to another database when prepare.",
    (G_PTR*) &xtrabackup_export, (G_PTR*) &xtrabackup_export,
+   0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+  {"rollback-xa", OPT_XTRA_ROLLBACK_XA, "Rollback prepared XA's on --prepare. "
+   "After preparing target directory with this option "
+   "it can no longer be a base for incremental backup.",
+   (G_PTR*) &xtrabackup_rollback_xa, (G_PTR*) &xtrabackup_rollback_xa,
    0, GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
   {"print-param", OPT_XTRA_PRINT_PARAM, "print parameter of mysqld needed for copyback.",
    (G_PTR*) &xtrabackup_print_param, (G_PTR*) &xtrabackup_print_param,
@@ -5555,7 +5564,9 @@ static bool xtrabackup_prepare_func(char** argv)
 	}
 
 	srv_operation = xtrabackup_export
-		? SRV_OPERATION_RESTORE_EXPORT : SRV_OPERATION_RESTORE;
+		? SRV_OPERATION_RESTORE_EXPORT
+		: (xtrabackup_rollback_xa
+		   ? SRV_OPERATION_RESTORE_ROLLBACK_XA : SRV_OPERATION_RESTORE);
 
 	if (innodb_init_param()) {
 		goto error_cleanup;
@@ -5578,8 +5589,46 @@ static bool xtrabackup_prepare_func(char** argv)
 		srv_max_dirty_pages_pct_lwm = srv_max_buf_pool_modified_pct;
 	}
 
+	if (xtrabackup_rollback_xa)
+		srv_fast_shutdown = 0;
+
 	if (innodb_init()) {
 		goto error_cleanup;
+	}
+
+
+	if (xtrabackup_rollback_xa) {
+		/* Please do not merge MDEV-21168 fix in 10.5+ */
+		compile_time_assert(MYSQL_VERSION_ID < 10 * 10000 + 5 * 100);
+		XID*	xid_list = (XID *)my_malloc(MAX_XID_LIST_SIZE*sizeof(XID), MYF(0));
+		if (!xid_list) {
+			msg("Can't allocate %i bytes for XID's list", MAX_XID_LIST_SIZE);
+			ok = false;
+			goto error_cleanup;
+		}
+		int got;
+		ut_ad(recv_no_log_write);
+		ut_d(recv_no_log_write = false);
+		while ((got= trx_recover_for_mysql(xid_list, MAX_XID_LIST_SIZE)) > 0)
+		{
+			for (int i=0; i < got; i ++)
+			{
+#ifndef DBUG_OFF
+				int rc=
+#endif // !DBUG_OFF
+				innobase_rollback_by_xid(NULL, xid_list + i);
+#ifndef DBUG_OFF
+				if (rc == 0)
+				{
+					char buf[XIDDATASIZE*4+6]; // see xid_to_str
+					DBUG_PRINT("info", ("rollback xid %s",
+						xid_to_str(buf, xid_list[i])));
+				}
+#endif // !DBUG_OFF
+			}
+		}
+		ut_d(recv_no_log_write = true);
+		my_free(xid_list);
 	}
 
 	if (ok) {
@@ -5617,7 +5666,22 @@ static bool xtrabackup_prepare_func(char** argv)
 	else if (ok) xb_write_galera_info(xtrabackup_incremental);
 #endif
 
-	innodb_shutdown();
+	if (xtrabackup_rollback_xa) {
+		//	See	innobase_end() and thd_destructor_proxy()
+		while (srv_fast_shutdown == 0 &&
+				(trx_sys_any_active_transactions() ||
+				 (uint)thread_count > srv_n_purge_threads + 1)) {
+			os_thread_sleep(1000);
+		}
+		srv_shutdown_bg_undo_sources();
+		srv_purge_shutdown();
+		buf_flush_sync_all_buf_pools();
+		innodb_shutdown();
+		innobase_space_shutdown();
+	}
+	else
+		innodb_shutdown();
+
 	innodb_free_param();
 
 	/* output to metadata file */
