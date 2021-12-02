@@ -59,6 +59,46 @@ do {\
 	}\
 } while (0)
 
+// TODO: remove this from the code after discussion with Marko
+// This is an example how to implement HASH_INSERT with template function.
+// Usage example: hash_insert(lock_hash, page_id.fold(), *lock, &lock_t::hash);
+template <typename hash_table_t, typename cell_t>
+void hash_insert(hash_table_t &table, ulint fold, cell_t &new_cell,
+                 cell_t *cell_t::*next_ptr)
+{
+  new_cell.*next_ptr= nullptr;
+  hash_cell_t *current_hash_cell= &table->array[table->calc_hash(fold)];
+  if (!current_hash_cell->node)
+    current_hash_cell->node= &new_cell;
+  else
+  {
+    cell_t *current_cell= static_cast<cell_t *>(current_hash_cell->node);
+    while (current_cell->*next_ptr)
+      current_cell= current_cell->*next_ptr;
+    current_cell->*next_ptr= &new_cell;
+  }
+}
+
+template <typename hash_table_t, typename cell_t>
+void hash_insert_after(hash_table_t &
+#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+                           table,
+#endif // defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+                       ulint fold, cell_t &cell_after, cell_t &cell_new,
+                       cell_t *cell_t::*next_ptr)
+{
+#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+  cell_t *current_cell=
+      static_cast<cell_t *>(table.array[table.calc_hash(fold)].node);
+  while (current_cell && current_cell != &cell_after)
+    current_cell= current_cell->*next_ptr;
+  ut_a(current_cell);
+  ut_a(current_cell == &cell_after);
+#endif // defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+  cell_new.*next_ptr= cell_after.*next_ptr;
+  cell_after.*next_ptr= &cell_new;
+}
+
 /*******************************************************************//**
 Inserts a struct to the head of hash table. */
 
@@ -85,9 +125,18 @@ do {							\
 #ifdef UNIV_HASH_DEBUG
 # define HASH_ASSERT_VALID(DATA) ut_a((void*) (DATA) != (void*) -1)
 # define HASH_INVALIDATE(DATA, NAME) *(void**) (&DATA->NAME) = (void*) -1
+template <typename cell_t>
+inline void hash_invalidate(cell_t &cell, cell_t *cell_t::*next_ptr)
+{
+  cell.*next_ptr= reinterpret_cast<cell_t *>(-1);
+}
 #else
 # define HASH_ASSERT_VALID(DATA) do {} while (0)
 # define HASH_INVALIDATE(DATA, NAME) do {} while (0)
+template <typename cell_t>
+inline void hash_invalidate(cell_t &cell, cell_t *cell_t::*next_ptr)
+{
+}
 #endif
 
 /*******************************************************************//**
@@ -116,6 +165,31 @@ do {\
 	}\
 	HASH_INVALIDATE(DATA, NAME);\
 } while (0)
+
+// TODO: remove this from the code after discussion with Marko
+// This is an example how to implement HASH_DELETE with template function.
+// Usage example:  hash_delete(lock_hash, rec_fold, *in_lock, &lock_t::hash);
+template <typename hash_table_t, typename cell_t>
+inline void hash_delete(hash_table_t &table, ulint fold, cell_t &del_cell,
+                        cell_t *cell_t::*next_ptr)
+{
+  hash_cell_t *current_hash_cell= &table.array[table.calc_hash(fold)];
+  if (current_hash_cell->node == &del_cell) {
+    HASH_ASSERT_VALID(del_cell.*next_ptr);
+    current_hash_cell->node= del_cell.*next_ptr;
+  }
+  else
+  {
+    cell_t *current_cell= static_cast<cell_t *>(current_hash_cell->node);
+    while (current_cell->*next_ptr != &del_cell) {
+      current_cell= current_cell->*next_ptr;
+      ut_a(current_cell);
+    }
+    current_cell->*next_ptr= del_cell.*next_ptr;
+  }
+  hash_invalidate(del_cell, next_ptr);
+}
+
 
 /*******************************************************************//**
 Gets the first struct in a hash chain, NULL if none. */

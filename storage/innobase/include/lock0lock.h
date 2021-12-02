@@ -1185,7 +1185,8 @@ lock_rec_create_low(
 	ulint		heap_no,
 	dict_index_t*	index,
 	trx_t*		trx,
-	bool		holds_trx_mutex);
+	bool		holds_trx_mutex,
+        bool convert_impl_to_expl = false);
 
 /** Enqueue a waiting request for a lock which cannot be granted immediately.
 Check for deadlocks.

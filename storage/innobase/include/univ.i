@@ -157,6 +157,8 @@ using the call command. */
 # define UNIV_DEBUG
 #endif
 
+#define UNIV_HASH_DEBUG 1
+
 #if 0
 #define UNIV_DEBUG_PRINT			/* Enable the compilation of
 						some debug print functions */
