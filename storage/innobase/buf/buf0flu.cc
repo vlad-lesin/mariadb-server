@@ -43,6 +43,7 @@ Created 11/11/1995 Heikki Tuuri
 #include "fil0pagecompress.h"
 #include "lzo/lzo1x.h"
 #include "snappy-c.h"
+#include "scope.h"
 
 /** Number of pages flushed via LRU. Protected by buf_pool.mutex.
 Also included in buf_pool.stat.n_pages_written. */
@@ -359,6 +360,23 @@ void buf_page_write_complete(const IORequest &request, bool error) noexcept
 
   if (UNIV_UNLIKELY(type != buf_page_t::PERSISTENT) && UNIV_LIKELY(!error))
   {
+    if (type == buf_page_t::EXT_BUF)
+    {
+      ut_d(if (DBUG_IF("ib_ext_bp_count_io_only_for_t")) {
+        if (fil_space_t *space= fil_space_t::get(bpage->id_.space()))
+        {
+          auto space_name= space->name();
+          if (fil_page_get_type(bpage->frame) == FIL_PAGE_INDEX &&
+              space_name.data() &&
+              !strncmp(space_name.data(), "test/t.ibd", space_name.size()))
+          {
+            ++buf_pool.stat.n_pages_written_to_ebp;
+          }
+          space->release();
+        }
+      } else)
+        ++buf_pool.stat.n_pages_written_to_ebp;
+    }
     /* We must hold buf_pool.mutex while releasing the block, so that
     no other thread can access it before we have freed it. */
     mysql_mutex_lock(&buf_pool.mutex);
@@ -1220,8 +1238,6 @@ struct flush_counters_t
   ulint flushed;
   /** number of clean pages evicted */
   ulint evicted;
- /** number of clean pages flushed to external buffer pool */
-  ulint flushed_to_ebp;
 };
 
 /** Discard a dirty page, and release buf_pool.flush_list_mutex.
@@ -1274,7 +1290,8 @@ static void buf_flush_LRU_list_batch(ulint max, flush_counters_t *n,
   ulint free_or_flush= 0;
   for (buf_page_t *bpage= UT_LIST_GET_LAST(buf_pool.LRU);
        bpage &&
-       ((UT_LIST_GET_LEN(buf_pool.LRU) > buf_lru_min_len &&
+       (ut_d(buf_pool.force_LRU_eviction_to_ebp ||)
+        (UT_LIST_GET_LEN(buf_pool.LRU) > buf_lru_min_len &&
          UT_LIST_GET_LEN(buf_pool.free) < free_limit) ||
         recv_recovery_is_on());
        ++scanned, bpage= buf_pool.lru_hp.get())
@@ -1292,10 +1309,18 @@ static void buf_flush_LRU_list_batch(ulint max, flush_counters_t *n,
       if (state != buf_page_t::FREED &&
           (state >= buf_page_t::READ_FIX || (~buf_page_t::LRU_MASK & state)))
         continue;
+      DBUG_EXECUTE_IF("ib_ext_bp_disable_LRU_eviction_for_t",
+        if(fil_space_t *space= fil_space_t::get(bpage->id_.space())) {
+          SCOPE_EXIT([space]() { space->release(); });
+          auto space_name = space->name();
+          if (space_name.data() &&
+              !strncmp(space_name.data(), "test/t.ibd", space_name.size()))
+            continue;
+        });
       // FIXME: currently every second page is flushed, consider more
       // suitable algorithm there
       if (buf_pool.extended_size && !buf_pool.done_flush_list_waiters_count &&
-          (++free_or_flush) & 1)
+          (ut_d(buf_pool.force_LRU_eviction_to_ebp ||)((++free_or_flush) & 1)))
       {
         flush_to_ebp= true;
         goto flush_to_ebp;
@@ -1403,6 +1428,17 @@ flush_to_ebp:
             ++n->evicted;
             continue;
           }
+          /*
+          ut_d(if (DBUG_IF("ib_ext_bp_count_io_only_for_t")) {
+            auto space_name= space->name();
+            if (space_name.data() &&
+                !strncmp(space_name.data(), "test/t.ibd", space_name.size()) &&
+                fil_page_get_type(bpage->frame) == FIL_PAGE_INDEX) {
+              ++buf_pool.stat.n_pages_written_to_ebp;
+              }
+          } else)
+          ++ buf_pool.stat.n_pages_written_to_ebp;
+          */
       }
       else if (neighbors && space->is_rotational() &&
           /* Skip neighbourhood flush from LRU list if we haven't yet reached
@@ -1416,7 +1452,7 @@ flush_to_ebp:
       else
         continue;
 
-    goto reacquire_mutex;
+      goto reacquire_mutex;
     }
     else
       /* Can't evict or dispatch this block. Go to previous. */
@@ -1448,7 +1484,6 @@ static void buf_do_LRU_batch(ulint max, flush_counters_t *n) noexcept
     buf_free_from_unzip_LRU_list_batch();
   n->evicted= 0;
   n->flushed= 0;
-  n->flushed_to_ebp= 0;
   buf_flush_LRU_list_batch(max, n, to_withdraw);
 
   mysql_mutex_assert_owner(&buf_pool.mutex);
@@ -2514,7 +2549,7 @@ bool buf_pool_t::need_LRU_eviction() const noexcept
 {
   /* try_LRU_scan==false means that buf_LRU_get_free_block() is waiting
   for buf_flush_page_cleaner() to evict some blocks */
-  return UNIV_UNLIKELY(!try_LRU_scan ||
+  return UNIV_UNLIKELY(ut_d(force_LRU_eviction_to_ebp ||) !try_LRU_scan ||
                        (UT_LIST_GET_LEN(LRU) > BUF_LRU_MIN_LEN &&
                         UT_LIST_GET_LEN(free) < LRU_scan_depth / 2));
 }
@@ -2528,6 +2563,11 @@ pools. As of now we'll have only one coordinator. */
 static void buf_flush_page_cleaner() noexcept
 {
   my_thread_init();
+#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+  auto thd = innobase_create_background_thd("page_cleaner");
+  set_current_thd(thd);
+#endif
+
 #ifdef UNIV_PFS_THREAD
   pfs_register_thread(page_cleaner_thread_key);
 #endif /* UNIV_PFS_THREAD */
@@ -2790,6 +2830,11 @@ static void buf_flush_page_cleaner() noexcept
   pthread_cond_broadcast(&buf_pool.done_flush_list);
   mysql_mutex_unlock(&buf_pool.flush_list_mutex);
 
+#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+  innobase_reset_background_thd(thd);
+  set_current_thd(nullptr);
+  destroy_background_thd(thd);
+#endif
   my_thread_end();
 
 #ifdef UNIV_PFS_THREAD

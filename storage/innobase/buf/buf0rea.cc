@@ -101,20 +101,25 @@ static page_init_result buf_page_init_for_read(const page_id_t page_id,
 
   page_hash_latch &hash_lock= buf_pool.page_hash.lock_get(chain);
   hash_lock.lock();
-  if (buf_pool.page_hash.get(page_id, chain))
+  buf_page_t *hash_page= buf_pool.page_hash.get<true>(page_id, chain);
+  if (hash_page)
   {
-page_exists:
-    hash_lock.unlock();
-    /* The page is already in the buffer pool. */
-    if (result.bpage)
-    {
-      result.bpage->lock.x_unlock(true);
-      result.bpage= nullptr;
-      ut_d(mysql_mutex_lock(&buf_pool.mutex));
-      ut_d(result.bpage->set_state(buf_page_t::MEMORY));
-      ut_d(mysql_mutex_unlock(&buf_pool.mutex));
+    if (hash_page->external())
+      result.ext_buf_page= reinterpret_cast<ext_buf_page_t *>(hash_page);
+    else {
+    page_exists:
+      hash_lock.unlock();
+      /* The page is already in the buffer pool. */
+      if (result.bpage)
+      {
+        result.bpage->lock.x_unlock(true);
+        ut_d(mysql_mutex_lock(&buf_pool.mutex));
+        ut_d(result.bpage->set_state(buf_page_t::MEMORY));
+        ut_d(mysql_mutex_unlock(&buf_pool.mutex));
+        result.bpage= nullptr;
+      }
+      return result;
     }
-    return result;
   }
 
   if (UNIV_UNLIKELY(mysql_mutex_trylock(&buf_pool.mutex)))
@@ -239,7 +244,8 @@ page_exists:
     buf_LRU_add_block(result.bpage, true/* to old blocks */);
   }
 
-  buf_pool.stat.n_pages_read++;
+  if (!result.in_ext_buffer_pool())
+   ++buf_pool.stat.n_pages_read;
 func_exit:
   mysql_mutex_unlock(&buf_pool.mutex);
   ut_ad(!result.bpage || result.bpage->in_file());
@@ -345,9 +351,21 @@ buf_read_page_low(
 		    init_page_result.in_ext_buffer_pool()
 		      ? *UT_LIST_GET_FIRST(space->chain)
 		      : *fio.node);
-		space->release();
-		if (init_page_result.in_ext_buffer_pool())
+		if (init_page_result.in_ext_buffer_pool()) {
+		  ut_d(
+			if (DBUG_IF("ib_ext_bp_count_io_only_for_t")) {
+				auto space_name= space->name();
+				if (fil_page_get_type(bpage->frame)
+				    == FIL_PAGE_INDEX
+				    && space_name.data()
+				    && !strncmp(space_name.data(), "test/t.ibd",
+				      space_name.size()))
+					++buf_pool.stat.n_pages_read_from_ebp;
+			} else)
+				++buf_pool.stat.n_pages_read_from_ebp;
 			fil_system.ext_bp_space->release();
+		}
+		space->release();
 		if (mariadb_timer) {
 			mariadb_increment_pages_read_time(mariadb_timer);
 		}

@@ -82,8 +82,12 @@ struct buf_pool_info_t
 	ulint	n_pages_made_young;	/*!< number of pages made young */
 	ulint	n_pages_not_made_young;	/*!< number of pages not made young */
 	ulint	n_pages_read;		/*!< buf_pool.n_pages_read */
+	/** buf_pool.n_pages_read_from_ebp */
+	ulint	n_pages_read_from_ebp;
 	ulint	n_pages_created;	/*!< buf_pool.n_pages_created */
 	ulint	n_pages_written;	/*!< buf_pool.n_pages_written */
+	/** buf_pool.n_pages_written_to_ebp */
+	ulint	n_pages_written_to_ebp;
 	ulint	n_page_gets;		/*!< buf_pool.n_page_gets */
 	ulint	n_ra_pages_read_rnd;	/*!< buf_pool.n_ra_pages_read_rnd,
 					number of pages readahead */
@@ -1090,7 +1094,11 @@ struct buf_pool_stat_t{
 				counted as page gets;
 				NOT protected by buf_pool.mutex */
 	ulint	n_pages_read;	/*!< number read operations */
+	/** Number of pages, read from external buffer pool file */
+	ulint	n_pages_read_from_ebp;
 	ulint	n_pages_written;/*!< number write operations */
+	/** Number of pages, written to external buffer pool file */
+	ulint	n_pages_written_to_ebp;
 	ulint	n_pages_created;/*!< number of pages created
 				in the pool with no read */
 	ulint	n_ra_pages_read_rnd;/*!< number of pages read in
@@ -1171,7 +1179,9 @@ public:
   size_t extended_size;
   /** Extended buffer pool file path */
   char  *extended_path;
-
+#ifdef UNIV_DEBUG
+  my_bool force_LRU_eviction_to_ebp;
+#endif
   /** Hash cell chain in page_hash_table */
   struct hash_chain
   {

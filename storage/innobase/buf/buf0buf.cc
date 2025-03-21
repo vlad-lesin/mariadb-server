@@ -1446,6 +1446,8 @@ bool buf_pool_t::create() noexcept
   n_blocks_to_withdraw= 0;
   UT_LIST_INIT(free, &buf_page_t::list);
   UT_LIST_INIT(ext_free, &ext_buf_page_t::free_list);
+  ut_d(force_LRU_eviction_to_ebp= 0);
+
   const size_t ssize= srv_page_size_shift - UNIV_PAGE_SIZE_SHIFT_MIN;
 
   for (char *extent= memory,
@@ -4015,10 +4017,12 @@ void buf_pool_t::get_info(buf_pool_info_t *pool_info) noexcept
   pool_info->n_pages_read= stat.n_pages_read;
   pool_info->pages_read_rate=
     double(stat.n_pages_read - old_stat.n_pages_read) / elapsed;
+  pool_info->n_pages_read_from_ebp= stat.n_pages_read_from_ebp;
   pool_info->n_pages_created= stat.n_pages_created;
   pool_info->pages_created_rate=
     double(stat.n_pages_created - old_stat.n_pages_created) / elapsed;
   pool_info->n_pages_written= stat.n_pages_written;
+  pool_info->n_pages_written_to_ebp= stat.n_pages_written_to_ebp;
   pool_info->pages_written_rate=
     double(stat.n_pages_written - old_stat.n_pages_written) / elapsed;
   pool_info->n_page_gets= stat.n_page_gets;

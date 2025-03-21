@@ -2945,11 +2945,22 @@ void IORequest::read_complete(int io_error) const noexcept
     mysql_mutex_unlock(&buf_pool.mutex);
     ut_ad(node->space == fil_system.ext_bp_space);
     node->space->release();
+    /* The space will be released at the end of this function */
     fil_space_t *space= fil_space_t::get(bpage->id().space());
     if (!space) {
       bpage->lock.x_unlock(true);
       return;
     }
+    ut_d(if (DBUG_IF("ib_ext_bp_count_io_only_for_t")) {
+      auto space_name= space->name();
+      if (fil_page_get_type(bpage->frame) == FIL_PAGE_INDEX &&
+          space_name.data() &&
+          !strncmp(space_name.data(), "test/t.ibd", space_name.size()))
+      {
+        ++buf_pool.stat.n_pages_read_from_ebp;
+      }
+    } else)
+      ++ buf_pool.stat.n_pages_read_from_ebp;
     /* We don't need to get the correct node here, because further it will be
     used only to decrypt and decompress data */
     node_local= UT_LIST_GET_FIRST(space->chain);

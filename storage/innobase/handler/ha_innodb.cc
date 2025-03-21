@@ -965,8 +965,12 @@ static SHOW_VAR innodb_status_variables[]= {
   {"buffer_pool_read_requests",
    &export_vars.innodb_buffer_pool_read_requests, SHOW_SIZE_T},
   {"buffer_pool_reads", &buf_pool.stat.n_pages_read, SHOW_SIZE_T},
+  {"ext_buffer_pool_reads", &buf_pool.stat.n_pages_read_from_ebp,
+    SHOW_SIZE_T},
   {"buffer_pool_wait_free", &buf_pool.stat.LRU_waits, SHOW_SIZE_T},
   {"buffer_pool_write_requests", &buf_pool.flush_list_requests, SHOW_SIZE_T},
+  {"ext_buffer_pool_pages_flushed", &buf_pool.stat.n_pages_written_to_ebp,
+    SHOW_SIZE_T},
   {"checkpoint_age", &export_vars.innodb_checkpoint_age, SHOW_SIZE_T},
   {"checkpoint_max_age", &export_vars.innodb_checkpoint_max_age, SHOW_SIZE_T},
   {"data_fsyncs", (size_t*) &os_n_fsyncs, SHOW_SIZE_T},
@@ -3700,6 +3704,28 @@ static void innodb_extended_buffer_pool_size_update(THD *thd,
   buf_pool.extended_size= buf_pool.extended_pages << srv_page_size_shift;
 }
 
+#ifdef UNIV_DEBUG
+static void innodb_force_LRU_eviction_set(THD *, st_mysql_sys_var *, void *,
+                                            const void *save)
+{
+  buf_pool.force_LRU_eviction_to_ebp= *static_cast<const my_bool *>(save);
+  if (buf_pool.force_LRU_eviction_to_ebp)
+  {
+    mysql_mutex_lock(&buf_pool.flush_list_mutex);
+    buf_pool.page_cleaner_wakeup(true);
+    my_cond_wait(&buf_pool.done_flush_list,
+                 &buf_pool.flush_list_mutex.m_mutex);
+    mysql_mutex_unlock(&buf_pool.flush_list_mutex);
+    mysql_mutex_lock(&buf_pool.flush_list_mutex);
+    buf_pool.page_cleaner_wakeup(true);
+    my_cond_wait(&buf_pool.done_flush_list,
+                 &buf_pool.flush_list_mutex.m_mutex);
+    mysql_mutex_unlock(&buf_pool.flush_list_mutex);
+  }
+  buf_pool.force_LRU_eviction_to_ebp= false;
+}
+#endif /* UNIV_DEBUG */
+
 static MYSQL_SYSVAR_SIZE_T(buffer_pool_size, buf_pool.size_in_bytes_requested,
   PLUGIN_VAR_RQCMDARG,
   "The size of the memory buffer InnoDB uses to cache data"
@@ -3740,16 +3766,22 @@ static MYSQL_SYSVAR_UINT(log_write_ahead_size, log_sys.write_size,
 
 static MYSQL_SYSVAR_SIZE_T(extended_buffer_pool_size, buf_pool.extended_size,
   PLUGIN_VAR_RQCMDARG,
-  "The extended buffer pool file size.",
+  "The extended buffer pool file size",
   nullptr, innodb_extended_buffer_pool_size_update,
   // TODO: set correct min and max values here.
   0, 0, SIZE_T_MAX, 0);
 
 static MYSQL_SYSVAR_STR(extended_buffer_pool_path, buf_pool.extended_path,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,
-  "Path to extended buffer pool file.",
+  "Path to extended buffer pool file",
   nullptr, nullptr, nullptr);
 
+#ifdef UNIV_DEBUG
+static MYSQL_SYSVAR_BOOL(force_LRU_eviction, buf_pool.force_LRU_eviction_to_ebp,
+  PLUGIN_VAR_OPCMDARG,
+  "Wake up page cleaner and wait for pages flushing end, used for testing only",
+  NULL, innodb_force_LRU_eviction_set, FALSE);
+#endif
 
 /****************************************************************//**
 Gives the file extension of an InnoDB single-table tablespace. */
@@ -19970,6 +20002,9 @@ static struct st_mysql_sys_var* innobase_system_variables[]= {
   MYSQL_SYSVAR(buffer_pool_size_max),
   MYSQL_SYSVAR(extended_buffer_pool_size),
   MYSQL_SYSVAR(extended_buffer_pool_path),
+#ifdef UNIV_DEBUG
+  MYSQL_SYSVAR(force_LRU_eviction),
+#endif
   MYSQL_SYSVAR(buffer_pool_chunk_size),
   MYSQL_SYSVAR(buffer_pool_filename),
   MYSQL_SYSVAR(buffer_pool_dump_now),
