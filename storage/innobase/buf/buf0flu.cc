@@ -776,9 +776,9 @@ bool buf_page_t::flush(fil_space_t *space, bool to_ext_buf) noexcept
   const lsn_t lsn=
     mach_read_from_8(my_assume_aligned<8>
                      (FIL_PAGE_LSN + (zip.data ? zip.data : frame)));
-  ut_ad(lsn
-        ? lsn >= oldest_modification() || oldest_modification() == 2
-        : (space->is_temporary() || space->is_being_imported()));
+  ut_ad(to_ext_buf ||
+        (lsn ? lsn >= oldest_modification() || oldest_modification() == 2
+             : (space->is_temporary() || space->is_being_imported())));
 
   if (s < UNFIXED)
   {
@@ -2563,11 +2563,6 @@ pools. As of now we'll have only one coordinator. */
 static void buf_flush_page_cleaner() noexcept
 {
   my_thread_init();
-#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
-  auto thd = innobase_create_background_thd("page_cleaner");
-  set_current_thd(thd);
-#endif
-
 #ifdef UNIV_PFS_THREAD
   pfs_register_thread(page_cleaner_thread_key);
 #endif /* UNIV_PFS_THREAD */
@@ -2830,11 +2825,6 @@ static void buf_flush_page_cleaner() noexcept
   pthread_cond_broadcast(&buf_pool.done_flush_list);
   mysql_mutex_unlock(&buf_pool.flush_list_mutex);
 
-#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
-  innobase_reset_background_thd(thd);
-  set_current_thd(nullptr);
-  destroy_background_thd(thd);
-#endif
   my_thread_end();
 
 #ifdef UNIV_PFS_THREAD

@@ -125,6 +125,7 @@ static page_init_result buf_page_init_for_read(const page_id_t page_id,
   if (UNIV_UNLIKELY(mysql_mutex_trylock(&buf_pool.mutex)))
   {
     hash_lock.unlock();
+    result.ext_buf_page= nullptr;
     mysql_mutex_lock(&buf_pool.mutex);
     hash_lock.lock();
     buf_page_t *hash_page= buf_pool.page_hash.get<true>(page_id, chain);

@@ -81,7 +81,7 @@ bool fil_space_t::try_to_close(fil_space_t *ignore_space, bool print_info)
   {
     if (&space == ignore_space || space.is_being_imported() ||
         space.id == TRX_SYS_SPACE || space.id == SRV_TMP_SPACE_ID ||
-        srv_is_undo_tablespace(space.id))
+        space.id == SRV_EXT_BP_SPACE_ID || srv_is_undo_tablespace(space.id))
       continue;
     ut_ad(!space.is_temporary());
 
@@ -1774,7 +1774,7 @@ void fil_close_tablespace(uint32_t id) noexcept
 @return	OS_FILE_CLOSED if no file existed */
 pfs_os_file_t fil_delete_tablespace(uint32_t id) noexcept
 {
-  ut_ad(!is_system_tablespace(id));
+  ut_ad(!is_system_tablespace(id) || id == SRV_EXT_BP_SPACE_ID);
   pfs_os_file_t handle= OS_FILE_CLOSED;
   if (fil_space_t *space= fil_space_t::drop(id, &handle))
     fil_space_free_low(space);
