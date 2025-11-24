@@ -508,6 +508,8 @@ public:
   another concurrent thread */
   static fil_space_t *drop(uint32_t id, pfs_os_file_t *detached_handle);
 
+  void remove_file_low();
+
 private:
   MY_ATTRIBUTE((warn_unused_result))
   /** Try to acquire a tablespace reference (increment referenced()).

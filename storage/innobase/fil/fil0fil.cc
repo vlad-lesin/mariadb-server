@@ -1629,7 +1629,7 @@ static void fil_name_write(uint32_t space_id, const char *name,
 
 fil_space_t *fil_space_t::drop(uint32_t id, pfs_os_file_t *detached_handle)
 {
-  ut_a(!is_system_tablespace(id));
+  ut_a(!is_system_tablespace(id) || id == SRV_EXT_BP_SPACE_ID);
   ut_ad(id != SRV_TMP_SPACE_ID);
   mysql_mutex_lock(&fil_system.mutex);
   fil_space_t *space= fil_space_get_by_id(id);
@@ -1735,6 +1735,13 @@ fil_space_t *fil_space_t::drop(uint32_t id, pfs_os_file_t *detached_handle)
   else
     os_file_close(handle);
   return space;
+}
+
+void fil_space_t::remove_file_low()
+{
+  fil_node_t *node= chain.start;
+  ut_ad(node && !node->is_open());
+  os_file_delete(innodb_data_file_key, node->name);
 }
 
 /** Close a single-table tablespace on failed IMPORT TABLESPACE.

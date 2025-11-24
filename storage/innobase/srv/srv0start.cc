@@ -2139,7 +2139,8 @@ void innodb_shutdown()
 	srv_tmp_space.shutdown();
 
 	if (fil_system.ext_bp_space) {
-	  fil_system.ext_bp_space->close();
+		fil_system.ext_bp_space->close();
+		fil_system.ext_bp_space->remove_file_low();
 	}
 
 	if (srv_stats.pages_page_compression_error)
