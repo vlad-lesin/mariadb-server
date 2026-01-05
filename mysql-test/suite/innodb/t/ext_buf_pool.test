@@ -25,12 +25,6 @@ START TRANSACTION WITH CONSISTENT SNAPSHOT;
 
 --let $DATADIR = `select @@datadir`
 
-#--let $restart_parameters=--innodb-extended-buffer-pool-size=10M
-#--source include/restart_mysqld.inc
-
-# Set ext buffer pool file size and check it was created, check it's size
-#--list_files $DATADIR ext_buffer_pool
-
 --disable_query_log
 --error 0,ER_UNKNOWN_SYSTEM_VARIABLE
 SET @old_innodb_limit_optimistic_insert_debug = @@innodb_limit_optimistic_insert_debug;
@@ -169,13 +163,3 @@ SET GLOBAL innodb_limit_optimistic_insert_debug = @old_innodb_limit_optimistic_i
 
 --disconnect prevent_purge
 --source include/wait_until_count_sessions.inc
-
-
-# Restart server with different buffer pool size, check the size is changed
-
-# Restart server with different ext buffer pool location, check it was created
-
-# Restart server with some impossible ext buffer pool location, check on error
-
-# Check extended buffer pool file is not copied during backup and created
-# during backup restoring

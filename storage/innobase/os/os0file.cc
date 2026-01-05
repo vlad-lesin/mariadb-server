@@ -3347,21 +3347,22 @@ func_exit:
 }
 
 /** Request a read or write.
-@param type		I/O request
-@param buf		buffer
-@param offset		file offset
-@param n		number of bytes
+@param type        I/O request
+@param buf         buffer
+@param offset      file offset
+@param n           number of bytes
 @retval DB_SUCCESS if request was queued successfully
 @retval DB_IO_ERROR on I/O error */
-dberr_t os_aio(const IORequest &type, void *buf, os_offset_t offset, size_t n)
-  noexcept {
-	ut_ad(type.node());
-	ut_ad(type.node()->is_open());
-	dberr_t err = os_aio(type, buf, offset, n, type.node()->handle,
-	    type.node()->name);
-	if (err == DB_IO_ERROR)
-	  type.node()->space->release();
-	return err;
+dberr_t os_aio(const IORequest &type, void *buf, os_offset_t offset,
+               size_t n) noexcept
+{
+  ut_ad(type.node());
+  ut_ad(type.node()->is_open());
+  dberr_t err=
+      os_aio(type, buf, offset, n, type.node()->handle, type.node()->name);
+  if (err == DB_IO_ERROR)
+    type.node()->space->release();
+  return err;
 }
 
 void os_aio_print(FILE *file) noexcept

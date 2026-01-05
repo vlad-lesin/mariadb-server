@@ -1754,14 +1754,6 @@ fil_space_t *fil_space_t::drop(uint32_t id, pfs_os_file_t *detached_handle)
   return space;
 }
 
-void fil_space_t::remove_file_low()
-{
-  fil_node_t *node= chain.start;
-  ut_ad(node);
-  ut_ad(!node->is_open());
-  os_file_delete(innodb_data_file_key, node->name);
-}
-
 /** Close a single-table tablespace on failed IMPORT TABLESPACE.
 The tablespace must be cached in the memory cache.
 Free all pages used by the tablespace. */
@@ -2916,8 +2908,8 @@ io_error:
 		goto release_sync_write;
 	} else {
 		/* Queue the aio request */
-		err = os_aio(IORequest{bpage, type.slot, node, type.type}, buf,
-		    offset, len);
+		err = os_aio(IORequest{bpage, type.slot, node, type.type},
+			     buf, offset, len);
 	}
 
 	if (!type.is_async()) {
@@ -2937,11 +2929,11 @@ func_exit:
 	return {err, node};
 }
 
-bool fil_system_t::create_ext_file() {
+bool fil_system_t::create_ext_file() noexcept {
   bool ret;
   ext_bp_file= pfs_create_temp_file(
       ext_bp_path ? ext_bp_path : fil_path_to_mysql_datadir,
-      "/Extended buffer pool file", "ext_buf_", 0);
+      "/Extended buffer pool file", "ext_buf_");
   if (ext_bp_file == OS_FILE_CLOSED)
   {
     sql_print_error("Cannot open/create extended buffer pool file");
@@ -3067,8 +3059,12 @@ void IORequest::read_complete(int io_error) const noexcept
   {
     sql_print_error("InnoDB: Read error %d of page " UINT32PF " in file %s",
                     io_error, id.page_no(),
-                    ext_buf() ? "of external buffer pool" : node_ptr->name);
-    if (!ext_buf())
+                    ext_buf() ? "of external buffer pool, external buffer "
+                                "pool is disabled"
+                              : node_ptr->name);
+    if (ext_buf())
+      fil_system.ext_buf_pool_disable();
+    else
       recv_sys.free_corrupted_page(id, *node_ptr);
     buf_pool.corrupted_evict(buf_page, buf_page_t::READ_FIX + 1);
   corrupted:
@@ -3455,13 +3451,8 @@ fil_space_t *fil_space_t::prev_in_unflushed_spaces() noexcept
 
 #endif
 
-/** Create temporary merge files in the given paramater path, and if
-UNIV_PFS_IO defined, register the file descriptor with Performance Schema.
-@param[in]	path	location for creating temporary merge files, or NULL
-@return File descriptor */
-pfs_os_file_t pfs_create_temp_file(const char *path,
-                                   const char *label, const char *prefix,
-                                   int mode)
+pfs_os_file_t pfs_create_temp_file(const char *path, const char *label,
+                                   const char *prefix)
 {
   if (!path)
   {

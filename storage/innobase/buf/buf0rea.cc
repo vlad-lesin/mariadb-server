@@ -66,7 +66,6 @@ struct page_init_result {
                                read from from exretnal buffer pool file */
 };
 
-
 /** Initialize a page for read to the buffer buf_pool. If the page is
 (1) already in buf_pool, or
 (2) if the tablespace has been or is being deleted,

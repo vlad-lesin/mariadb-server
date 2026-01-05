@@ -3671,6 +3671,9 @@ static void innodb_force_LRU_eviction_set(THD *, st_mysql_sys_var *, void *,
   buf_pool.force_LRU_eviction_to_ebp= *static_cast<const my_bool *>(save);
   if (buf_pool.force_LRU_eviction_to_ebp)
   {
+    /* Wake up page cleaner twice, the first one is to flush dirty pages to
+    data files, the second one is to flush clean pages to external buffer pool.
+    */
     mysql_mutex_lock(&buf_pool.flush_list_mutex);
     buf_pool.page_cleaner_wakeup(true);
     my_cond_wait(&buf_pool.done_flush_list,

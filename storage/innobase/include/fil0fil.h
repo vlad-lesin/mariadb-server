@@ -524,8 +524,6 @@ public:
   another concurrent thread */
   static fil_space_t *drop(uint32_t id, pfs_os_file_t *detached_handle);
 
-  void remove_file_low();
-
 private:
   MY_ATTRIBUTE((warn_unused_result))
   /** Try to acquire a tablespace reference (increment referenced()).
@@ -1420,6 +1418,9 @@ private:
 #ifdef __linux__
   /** available block devices that reside on non-rotational storage */
   std::vector<dev_t> ssd;
+
+  /** External buffer pool file handler */
+  pfs_os_file_t ext_bp_file;
 public:
   /** @return whether a file system device is on non-rotational storage */
   bool is_ssd(dev_t dev) const noexcept
@@ -1445,9 +1446,6 @@ public:
   mysql_mutex_t mutex;
 	fil_space_t*	sys_space;	/*!< The innodb_system tablespace */
 	fil_space_t*	temp_space;	/*!< The innodb_temporary tablespace */
-private:
-  pfs_os_file_t ext_bp_file;
-
 public:
 
   /** Extended buffer pool file path */
@@ -1457,14 +1455,6 @@ public:
   not used. */
   size_t ext_bp_size;
 
-  /** Create external buffer pool file.
-  @return whether the creation failed */
-  bool create_ext_file();
-  dberr_t ext_bp_io(buf_page_t &bpage, ext_buf_page_t &ext_buf_page,
-                    IORequest::Type io_request_type, buf_tmp_buffer_t *slot,
-                    size_t len, void *buf) noexcept;
-  bool ext_buf_pool_enabled() const { return ext_bp_size; }
-  void ext_buf_pool_disable() { ext_bp_size= 0; }
   /** Map of fil_space_t::id to fil_space_t* */
   hash_table_t spaces;
 
@@ -1521,6 +1511,33 @@ public:
   /** whether fil_space_t::create() has issued a warning about
   potential space_id reuse */
   bool space_id_reuse_warned;
+
+  /** Create external buffer pool file.
+  @return whether the creation failed */
+  bool create_ext_file() noexcept;
+
+  /** External bufer pool os_aio() wrapper.
+  @param bpage           buffer pool page for read/write
+  @param ext_buf_page    external buffer pool page which will be freed on read
+                         completion and replace bpage in buffer pool on write
+                         completion
+  @param io_request_type IORequest::WRITE_ASYNC, IORequest::READ_SYNC or
+                         IORequest::READ_ASYNC
+  @param slot            memory to be used for encrypted or page_compressed
+                         pages
+  @param len             length to read/write
+  @param buf             buffer
+  @retval DB_SUCCESS if request was queued successfully
+  @retval DB_IO_ERROR on I/O error */
+  dberr_t ext_bp_io(buf_page_t &bpage, ext_buf_page_t &ext_buf_page,
+                    IORequest::Type io_request_type, buf_tmp_buffer_t *slot,
+                    size_t len, void *buf) noexcept;
+
+  /** Returns if external buffer pool is enabled. */
+  bool ext_buf_pool_enabled() const { return ext_bp_size; }
+
+  /** Disable external boffer pool */
+  void ext_buf_pool_disable() { ext_bp_size= 0; }
 
   /** Add the file to the end of opened spaces list in
   fil_system.space_list, so that fil_space_t::try_to_close() should close
@@ -1858,7 +1875,12 @@ ulint fil_space_get_block_size(const fil_space_t* space, unsigned offset)
 bool fil_crypt_check(fil_space_crypt_t *crypt_data, const char *f_name)
   noexcept;
 
+/** Create temporary files in the given paramater path, and if
+UNIV_PFS_IO defined, register the file descriptor with Performance Schema.
+@param path   location for creating temporary merge files, or NULL
+@param label  label for registration in Performance Schema if path == nullptr
+@param prefix temporary file name prefix
+@return File descriptor */
 pfs_os_file_t pfs_create_temp_file(const char *path, const char *label,
-                                   const char *prefix, int mode);
-
+                                   const char *prefix);
 #endif /* UNIV_INNOCHECKSUM */

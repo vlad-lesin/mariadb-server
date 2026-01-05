@@ -762,7 +762,7 @@ ATTRIBUTE_COLD void buf_pool_t::release_freed_page(buf_page_t *bpage) noexcept
 
 /** Write a flushable page to a file or free a freeable block.
 @param space       tablespace
-@param to_ext_buf  wherher to write the page to external buffer pull file
+@param to_ext_buf  whether to write the page to external buffer pull file
 @return whether a page write was initiated and buf_pool.mutex released */
 bool buf_page_t::flush(fil_space_t *space, bool to_ext_buf) noexcept
 {
@@ -2987,6 +2987,7 @@ void buf_flush_sync() noexcept
   thd_wait_begin(nullptr, THD_WAIT_DISKIO);
   tpool::tpool_wait_begin();
   log_sys.latch.wr_lock(SRW_LOCK_CALL);
+
   for (lsn_t lsn= log_sys.get_lsn();;)
   {
     log_sys.latch.wr_unlock();
@@ -2997,7 +2998,6 @@ void buf_flush_sync() noexcept
     while (buf_flush_sync_lsn)
       my_cond_wait(&buf_pool.done_flush_list,
                    &buf_pool.flush_list_mutex.m_mutex);
-
     --buf_pool.done_flush_list_waiters_count;
     mysql_mutex_unlock(&buf_pool.flush_list_mutex);
     log_sys.latch.wr_lock(SRW_LOCK_CALL);

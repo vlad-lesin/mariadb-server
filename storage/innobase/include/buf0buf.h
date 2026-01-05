@@ -866,24 +866,6 @@ public:
   unsigned is_accessed() const noexcept
   { ut_ad(in_file()); return access_time; }
 };
-/* TODO: offsetof() doesn't work on non-standard classes
-static_assert(offsetof(ext_buf_page_t, id) == offsetof(buf_page_t, id_), "");
-static_assert(offsetof(ext_buf_page_t, hash) == offsetof(buf_page_t, hash),
-              "");
-static_assert(offsetof(ext_buf_page_t, frame) == offsetof(buf_page_t, frame),
-              "");
-#ifdef UNIV_DEBUG
-static_assert(offsetof(ext_buf_page_t, in_LRU_list) ==
-                  offsetof(buf_page_t, in_LRU_list),
-              "");
-static_assert(offsetof(ext_buf_page_t, in_page_hash) ==
-                  offsetof(buf_page_t, in_page_hash),
-              "");
-static_assert(offsetof(ext_buf_page_t, in_free_list) ==
-                  offsetof(buf_page_t, in_free_list),
-              "");
-#endif
-*/
 
 /** The buffer control block structure */
 
@@ -1191,6 +1173,8 @@ public:
   ext_buf_pages_array */
   size_t extended_pages;
 #ifdef UNIV_DEBUG
+  /** Shows if force LRU eviction to external buffer poll is currently on.
+  Debug only. */
   my_bool force_LRU_eviction_to_ebp;
 #endif
   /** Hash cell chain in page_hash_table */

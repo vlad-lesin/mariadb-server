@@ -1651,7 +1651,6 @@ void buf_pool_t::close() noexcept
   page_hash.free();
 
   io_buf.close();
-
   aligned_free(const_cast<byte*>(field_ref_zero));
   field_ref_zero= nullptr;
 }
@@ -3744,11 +3743,8 @@ dberr_t buf_page_t::read_complete(const fil_node_t &node,
     ut_ad(f > READ_FIX);
     ut_ad(f < WRITE_FIX);
   }
-  else
-  {
-    if (!recv_recover_page(node.space, this))
-      return DB_PAGE_CORRUPTED;
-  }
+  else if (!recv_recover_page(node.space, this))
+    return DB_PAGE_CORRUPTED;
 
   if (UNIV_UNLIKELY(MONITOR_IS_ON(MONITOR_MODULE_BUF_PAGE)))
     buf_page_monitor(*this, true);
