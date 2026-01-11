@@ -182,7 +182,7 @@ static int PROTO { NOSYMLINK_FUNCTION_BODY(AT,NOAT) }
 #ifdef _WIN32
 #include <sys/stat.h>
 /* my_winfile.c exports, should not be used outside mysys */
-extern File     my_win_open(const char *path, int oflag);
+extern File     my_win_open(const char *path, int oflag, myf MyFlags);
 extern int      my_win_close(File fd);
 extern size_t   my_win_read(File fd, uchar *buffer, size_t  count);
 extern size_t   my_win_write(File fd, const uchar *buffer, size_t count);
@@ -200,7 +200,7 @@ extern int      my_win_stat(const char *path, struct _stati64 *buf);
 extern int      my_win_fstat(File fd, struct _stati64 *buf);
 extern int      my_win_fsync(File fd);
 extern File     my_win_dup(File fd);
-extern File     my_win_sopen(const char *path, int oflag, int shflag, int perm);
+extern File     my_win_sopen(const char *path, int oflag, int shflag, int perm, myf MyFlags);
 extern File     my_open_osfhandle(HANDLE handle, int oflag);
 
 

@@ -299,10 +299,7 @@ void buf_page_t::write_complete(space_type type, bool error,
     if (type != EXT_BUF)
       oldest_modification_.store(persistent, std::memory_order_release);
   }
-  zip.fix.fetch_sub((state >= WRITE_FIX_REINIT)
-                    ? (WRITE_FIX_REINIT - UNFIXED)
-                    : (WRITE_FIX - UNFIXED));
-  lock.u_unlock(true);
+  write_complete_release(state);
 }
 
 inline void buf_pool_t::n_flush_inc() noexcept
@@ -1363,7 +1360,9 @@ static void buf_flush_LRU_list_batch(ulint max, flush_counters_t *n,
       }
       else
       {
+      #if !defined(DBUG_OFF)
       free_page:
+      #endif
         buf_LRU_free_page(bpage, true);
         ++n->evicted;
       }

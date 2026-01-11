@@ -1154,10 +1154,12 @@ static bool buf_LRU_block_remove_hashed(buf_page_t *bpage, const page_id_t id,
 }
 
 /** Release and evict a corrupted page.
-@param bpage    x-latched page that was found corrupted
-@param state    expected current state of the page */
+@param bpage          x-latched page that was found corrupted
+@param state          expected current state of the page
+@param set_corrupt_id true to call bpage->set_corrupt_id() */
 ATTRIBUTE_COLD
-void buf_pool_t::corrupted_evict(buf_page_t *bpage, uint32_t state) noexcept
+void buf_pool_t::corrupted_evict(buf_page_t *bpage, uint32_t state,
+                                 bool set_corrupt_id) noexcept
 {
   const page_id_t id{bpage->id()};
   buf_pool_t::hash_chain &chain= buf_pool.page_hash.cell_get(id.fold());
@@ -1167,7 +1169,8 @@ void buf_pool_t::corrupted_evict(buf_page_t *bpage, uint32_t state) noexcept
   hash_lock.lock();
 
   ut_ad(!bpage->oldest_modification());
-  bpage->set_corrupt_id();
+  if (set_corrupt_id)
+    bpage->set_corrupt_id();
   auto unfix= state - buf_page_t::FREED;
   auto s= bpage->zip.fix.fetch_sub(unfix) - unfix;
   bpage->lock.x_unlock(true);

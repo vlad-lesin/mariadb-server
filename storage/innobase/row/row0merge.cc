@@ -4348,7 +4348,7 @@ void row_merge_drop_temp_indexes()
 pfs_os_file_t row_merge_file_create_low(const char *path)
 {
   auto fd= pfs_create_temp_file(path, merge_temp_file_label,
-                                merge_temp_file_prefix);
+                                merge_temp_file_prefix, false);
   if (fd == OS_FILE_CLOSED)
   {
     ib::error() << "Cannot create temporary merge file";
@@ -4370,7 +4370,7 @@ row_merge_file_create(
 	merge_file->fd =
 		pfs_create_temp_file(path,
 				     merge_temp_file_label,
-				     merge_temp_file_prefix);
+				     merge_temp_file_prefix, false);
 	if (merge_file->fd == OS_FILE_CLOSED)
 	{
 	  ib::error() << "Cannot create temporary merge file";

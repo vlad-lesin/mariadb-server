@@ -772,6 +772,16 @@ public:
   void write_complete(space_type type, bool error,
                       uint32_t state) noexcept;
 
+  /** Set correct state and unlock the page on write completion.
+  @param state current page's state */
+  void write_complete_release(uint32_t state) noexcept
+  {
+    zip.fix.fetch_sub((state >= WRITE_FIX_REINIT)
+                          ? (WRITE_FIX_REINIT - UNFIXED)
+                          : (WRITE_FIX - UNFIXED));
+    lock.u_unlock(true);
+  }
+
   /** Write a flushable page to a file or free a freeable block.
   @param space       tablespace
   @param to_ext_buf  wherher to write the page to external buffer pull file
@@ -1093,11 +1103,20 @@ struct buf_pool_stat_t{
 		ulint n_page_gets_nonatomic;
 	};
 	ulint	n_pages_read;	/*!< number read operations */
+	ulint	n_pages_written;/*!< number write operations */
+	/* Make external buffer pool counters to be atomic for debug build to
+	avoid race conditions during MTR test case execution */
+#if defined(UNIV_DEBUG) || !defined(DBUG_OFF)
+	/** Number of pages, read from external buffer pool file */
+	Atomic_counter<ulint>	n_pages_read_from_ebp;
+	/** Number of pages, written to external buffer pool file */
+	Atomic_counter<ulint>	n_pages_written_to_ebp;
+#else
 	/** Number of pages, read from external buffer pool file */
 	ulint	n_pages_read_from_ebp;
-	ulint	n_pages_written;/*!< number write operations */
 	/** Number of pages, written to external buffer pool file */
 	ulint	n_pages_written_to_ebp;
+#endif
 	ulint	n_pages_created;/*!< number of pages created
 				in the pool with no read */
 	ulint	n_ra_pages_read_rnd;/*!< number of pages read in
@@ -1316,10 +1335,11 @@ public:
   ATTRIBUTE_COLD bool withdraw(buf_page_t &bpage) noexcept;
 
   /** Release and evict a corrupted page.
-  @param bpage    x-latched page that was found corrupted
-  @param state    expected current state of the page */
-  ATTRIBUTE_COLD void corrupted_evict(buf_page_t *bpage, uint32_t state)
-    noexcept;
+  @param bpage          x-latched page that was found corrupted
+  @param state          expected current state of the page
+  @param set_corrupt_id true to call bpage->set_corrupt_id() */
+  ATTRIBUTE_COLD void corrupted_evict(buf_page_t *bpage, uint32_t state,
+                                      bool set_corrupt_id= true) noexcept;
 
   /** Release a memory block to the buffer pool. */
   ATTRIBUTE_COLD void free_block(buf_block_t *block) noexcept;

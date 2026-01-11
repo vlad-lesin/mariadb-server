@@ -1301,6 +1301,8 @@ void fil_system_t::close() noexcept
   {
     if (ext_bp_file != OS_FILE_CLOSED)
     {
+      if (srv_thread_pool)
+        srv_thread_pool->unbind(ext_bp_file.m_file);
       int res= mysql_file_close(
           IF_WIN(my_win_handle2File((os_file_t) ext_bp_file), ext_bp_file),
           MYF(MY_WME));
@@ -2933,7 +2935,7 @@ bool fil_system_t::create_ext_file() noexcept {
   bool ret;
   ext_bp_file= pfs_create_temp_file(
       ext_bp_path ? ext_bp_path : fil_path_to_mysql_datadir,
-      "/Extended buffer pool file", "ext_buf_");
+      "/Extended buffer pool file", "ext_buf_", true);
   if (ext_bp_file == OS_FILE_CLOSED)
   {
     sql_print_error("Cannot open/create extended buffer pool file");
@@ -2947,6 +2949,13 @@ bool fil_system_t::create_ext_file() noexcept {
     os_file_close_func(ext_bp_file.m_file);
     sql_print_error("Cannot set extended buffer pool file size to %zum",
                     ext_bp_size);
+    return false;
+  }
+  if (srv_thread_pool && srv_thread_pool->bind(ext_bp_file.m_file) != 0)
+  {
+    sql_print_error("Cannot set async io for extended buffer pool file");
+    /* Report OS error in error log */
+    (void) os_file_get_last_error(true, false);
     return false;
   }
   return true;
@@ -2982,9 +2991,7 @@ void IORequest::write_complete(int io_error) const noexcept
     space= fil_space_t::get(buf_page->id().space());
     if (!space)
     {
-      buf_page->lock.u_unlock(true);
-      // TODO: should we update the statistics here?
-      //++buf_pool.stat.n_pages_written_to_ebp;
+      buf_page->write_complete_release(buf_page->state());
       return;
     }
   }
@@ -3034,7 +3041,7 @@ void IORequest::read_complete(int io_error) const noexcept
     /* The space will be released at the end of this function */
     space= fil_space_t::get(buf_page->id().space());
     if (!space) {
-      buf_page->lock.x_unlock(true);
+      buf_pool.corrupted_evict(buf_page, buf_page_t::READ_FIX + 1, false);
       ++buf_pool.stat.n_pages_read_from_ebp;
       return;
     }
@@ -3452,7 +3459,7 @@ fil_space_t *fil_space_t::prev_in_unflushed_spaces() noexcept
 #endif
 
 pfs_os_file_t pfs_create_temp_file(const char *path, const char *label,
-                                   const char *prefix)
+                                   const char *prefix, bool async_io)
 {
   if (!path)
   {
@@ -3476,8 +3483,9 @@ pfs_os_file_t pfs_create_temp_file(const char *path, const char *label,
 #endif
   DBUG_ASSERT(strlen(path) + 2 <= FN_REFLEN);
   char filename[FN_REFLEN];
-  File f= create_temp_file(filename, path, prefix, O_BINARY | O_SEQUENTIAL,
-                           MYF(MY_WME | MY_TEMPORARY));
+  File f= create_temp_file(
+      filename, path, prefix, O_BINARY | O_SEQUENTIAL,
+      MYF(MY_WME | MY_TEMPORARY | (async_io ? MY_OPEN_FOR_ASYNC_IO : 0)));
   pfs_os_file_t fd= IF_WIN((os_file_t) my_get_osfhandle(f), f);
 
 #ifdef UNIV_PFS_IO
