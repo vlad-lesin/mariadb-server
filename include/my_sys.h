@@ -60,7 +60,7 @@ C_MODE_START
 #define MY_IGNORE_ENOENT 32U    /* my_delete() ignores ENOENT (no such file) */
 #define MY_ENCRYPT      64U     /* Encrypt IO_CACHE temporary files */
 #define MY_TEMPORARY    64U     /* create_temp_file(): delete file at once */
-#define MY_OPEN_FOR_ASYNC_IO 128U /* my_open() open file for async io */
+#define MY_OPEN_FOR_ASYNC_IO 1024U /* my_open() open file for async io */
 #define MY_NOSYMLINKS  512U     /* my_open(): don't follow symlinks */
 #define MY_FULL_IO     512U     /* my_read(): loop until I/O is complete */
 #define MY_DONT_CHECK_FILESIZE 128U /* Option to init_io_cache() */

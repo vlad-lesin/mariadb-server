@@ -1301,8 +1301,10 @@ void fil_system_t::close() noexcept
   {
     if (ext_bp_file != OS_FILE_CLOSED)
     {
+#if defined(_WIN32)
       if (srv_thread_pool)
         srv_thread_pool->unbind(ext_bp_file.m_file);
+#endif
       int res= mysql_file_close(
           IF_WIN(my_win_handle2File((os_file_t) ext_bp_file), ext_bp_file),
           MYF(MY_WME));
@@ -2951,6 +2953,7 @@ bool fil_system_t::create_ext_file() noexcept {
                     ext_bp_size);
     return false;
   }
+#if defined(_WIN32)
   if (srv_thread_pool && srv_thread_pool->bind(ext_bp_file.m_file) != 0)
   {
     sql_print_error("Cannot set async io for extended buffer pool file");
@@ -2958,6 +2961,7 @@ bool fil_system_t::create_ext_file() noexcept {
     (void) os_file_get_last_error(true, false);
     return false;
   }
+#endif
   return true;
 }
 
