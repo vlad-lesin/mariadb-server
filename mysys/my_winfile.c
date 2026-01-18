@@ -166,16 +166,13 @@ LPSECURITY_ATTRIBUTES my_win_file_secattr()
   oflag   operation flags
   shflag  share flag
   pmode   permission flags
-  MyFlags flags, used to open files, currently only MY_OPEN_FOR_ASYNC_IO
-          is used
 
   RETURN VALUE
   File descriptor of opened file if success
   -1 and sets errno if fails.
 */
 
-File my_win_sopen(const char *path, int oflag, int shflag, int pmode,
-                  myf MyFlags)
+File my_win_sopen(const char *path, int oflag, int shflag, int pmode)
 {
   int  fh;                                /* handle of opened file */
   int mask;
@@ -288,11 +285,6 @@ File my_win_sopen(const char *path, int oflag, int shflag, int pmode,
     fileaccess|= DELETE;
   }
 
-  if (MyFlags & MY_OPEN_FOR_ASYNC_IO)
-  {
-    fileattrib|= FILE_FLAG_OVERLAPPED;
-  }
-
   /* Set temporary file (delay-flush-to-disk) attribute if requested.*/
   if (oflag & _O_SHORT_LIVED)
     fileattrib|= FILE_ATTRIBUTE_TEMPORARY;
@@ -325,11 +317,11 @@ File my_win_sopen(const char *path, int oflag, int shflag, int pmode,
 }
 
 
-File my_win_open(const char *path, int flags, myf MyFlags)
+File my_win_open(const char *path, int flags)
 {
   DBUG_ENTER("my_win_open");
   DBUG_RETURN(my_win_sopen((char *) path, flags | _O_BINARY, _SH_DENYNO, 
-    _S_IREAD | S_IWRITE, MyFlags));
+    _S_IREAD | S_IWRITE));
 }
 
 

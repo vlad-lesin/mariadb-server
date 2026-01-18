@@ -1418,7 +1418,6 @@ private:
 #ifdef __linux__
   /** available block devices that reside on non-rotational storage */
   std::vector<dev_t> ssd;
-
 public:
   /** @return whether a file system device is on non-rotational storage */
   bool is_ssd(dev_t dev) const noexcept
@@ -1873,13 +1872,4 @@ ulint fil_space_get_block_size(const fil_space_t* space, unsigned offset)
 bool fil_crypt_check(fil_space_crypt_t *crypt_data, const char *f_name)
   noexcept;
 
-/** Create temporary files in the given paramater path, and if
-UNIV_PFS_IO defined, register the file descriptor with Performance Schema.
-@param path     location for creating temporary merge files, or NULL
-@param label    label for registration in Performance Schema if path == nullptr
-@param prefix   temporary file name prefix
-@param async_io true if the file is going to be used with asynchronous IO
-@return File descriptor */
-pfs_os_file_t pfs_create_temp_file(const char *path, const char *label,
-                                   const char *prefix, bool async_io);
 #endif /* UNIV_INNOCHECKSUM */

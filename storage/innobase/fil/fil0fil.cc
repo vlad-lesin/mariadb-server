@@ -1301,15 +1301,14 @@ void fil_system_t::close() noexcept
   {
     if (ext_bp_file != OS_FILE_CLOSED)
     {
-#if defined(_WIN32)
-      if (srv_thread_pool)
-        srv_thread_pool->unbind(ext_bp_file.m_file);
-#endif
-      int res= mysql_file_close(
-          IF_WIN(my_win_handle2File((os_file_t) ext_bp_file), ext_bp_file),
-          MYF(MY_WME));
-      ut_a(res != -1);
+      int ret= os_file_close(ext_bp_file);
+      ut_a(ret);
       ext_bp_file= OS_FILE_CLOSED;
+      char path[FN_REFLEN];
+      snprintf(path, sizeof(path), "%s" FN_ROOTDIR "%s",
+               ext_bp_path ? ext_bp_path : fil_path_to_mysql_datadir,
+               ext_bp_file_name);
+      os_file_delete(innodb_data_file_key, path);
     }
     spaces.free();
     mysql_mutex_destroy(&mutex);
@@ -2933,35 +2932,32 @@ func_exit:
 	return {err, node};
 }
 
-bool fil_system_t::create_ext_file() noexcept {
+bool fil_system_t::create_ext_file() noexcept
+{
+  char path[FN_REFLEN];
+  snprintf(path, sizeof(path), "%s" FN_ROOTDIR "%s",
+           ext_bp_path ? ext_bp_path : fil_path_to_mysql_datadir,
+           ext_bp_file_name);
   bool ret;
-  ext_bp_file= pfs_create_temp_file(
-      ext_bp_path ? ext_bp_path : fil_path_to_mysql_datadir,
-      "/Extended buffer pool file", "ext_buf_", true);
-  if (ext_bp_file == OS_FILE_CLOSED)
-  {
-    sql_print_error("Cannot open/create extended buffer pool file");
-    /* Report OS error in error log */
-    (void)os_file_get_last_error(true, false);
-    return false;
-  }
-  ret= os_file_set_size(ext_bp_file_name, ext_bp_file.m_file, ext_bp_size);
+  ext_bp_file=
+      os_file_create(innodb_data_file_key, path, OS_FILE_OPEN_OR_CREATE,
+                     OS_DATA_FILE, false, &ret);
   if (!ret)
   {
-    os_file_close_func(ext_bp_file.m_file);
-    sql_print_error("Cannot set extended buffer pool file size to %zum",
-                    ext_bp_size);
-    return false;
-  }
-#if defined(_WIN32)
-  if (srv_thread_pool && srv_thread_pool->bind(ext_bp_file.m_file) != 0)
-  {
-    sql_print_error("Cannot set async io for extended buffer pool file");
+    sql_print_error("Cannot open/create extended buffer pool file '%s'", path);
     /* Report OS error in error log */
     (void) os_file_get_last_error(true, false);
     return false;
   }
-#endif
+  ut_ad(ext_bp_file != OS_FILE_CLOSED);
+  ret= os_file_set_size(path, ext_bp_file.m_file, ext_bp_size);
+  if (!ret)
+  {
+    os_file_close_func(ext_bp_file.m_file);
+    sql_print_error("Cannot set extended buffer pool file '%s' size to %zum",
+                    path, ext_bp_size);
+    return false;
+  }
   return true;
 }
 
@@ -3461,45 +3457,3 @@ fil_space_t *fil_space_t::prev_in_unflushed_spaces() noexcept
 }
 
 #endif
-
-pfs_os_file_t pfs_create_temp_file(const char *path, const char *label,
-                                   const char *prefix, bool async_io)
-{
-  if (!path)
-  {
-    path= mysql_tmpdir;
-  }
-#ifdef UNIV_PFS_IO
-  /* This temp file open does not go through normal
-  file APIs, add instrumentation to register with
-  performance schema */
-  struct PSI_file_locker *locker;
-  PSI_file_locker_state state;
-  char *name=
-      static_cast<char *>(ut_malloc_nokey(strlen(path) + strlen(label) + 1));
-  strcpy(name, path);
-  strcat(name, label);
-
-  register_pfs_file_open_begin(&state, locker, innodb_temp_file_key,
-                               PSI_FILE_CREATE, path ? name : label, __FILE__,
-                               __LINE__);
-
-#endif
-  DBUG_ASSERT(strlen(path) + 2 <= FN_REFLEN);
-  char filename[FN_REFLEN];
-  File f= create_temp_file(
-      filename, path, prefix, O_BINARY | O_SEQUENTIAL,
-      MYF(MY_WME | MY_TEMPORARY | (async_io ? MY_OPEN_FOR_ASYNC_IO : 0)));
-  pfs_os_file_t fd= IF_WIN((os_file_t) my_get_osfhandle(f), f);
-
-#ifdef UNIV_PFS_IO
-  register_pfs_file_open_end(locker, fd, (fd == OS_FILE_CLOSED) ? NULL : &fd);
-  ut_free(name);
-#endif
-
-  if (fd == OS_FILE_CLOSED)
-  {
-    ib::error() << "Cannot create temporary merge file";
-  }
-  return (fd);
-}
