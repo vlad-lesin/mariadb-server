@@ -2992,6 +2992,8 @@ void IORequest::write_complete(int io_error) const noexcept
     if (!space)
     {
       buf_page->write_complete_release(buf_page->state());
+      if (slot)
+        slot->release();
       return;
     }
   }

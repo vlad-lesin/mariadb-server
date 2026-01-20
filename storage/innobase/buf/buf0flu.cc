@@ -1381,11 +1381,6 @@ flush_to_ebp:
     ut_ad(!bpage->is_io_fixed());
     switch (bpage->oldest_modification())
     {
-    case 2:
-      /* LRU flushing will always evict pages of the temporary tablespace,
-      in buf_page_write_complete(). */
-      ++n->evicted;
-      break;
     case 1:
       mysql_mutex_lock(&buf_pool.flush_list_mutex);
       if (ut_d(lsn_t lsn=) bpage->oldest_modification())
@@ -1401,6 +1396,16 @@ flush_to_ebp:
         bpage->lock.u_unlock(true);
         goto evict;
       }
+      break;
+    case 2:
+      /* LRU flushing will always evict pages of the temporary tablespace,
+      in buf_page_write_complete(). */
+      ++n->evicted;
+      /* fall through */
+    default:
+      /* bpage->oldest_modification() could be changed from 0 to not 0 while
+      bpage was unlocked, in this case we just flush the page to its space */
+      flush_to_ebp= false;
     }
     /* Block is ready for flush. Dispatch an IO request. */
     const page_id_t page_id(bpage->id());
