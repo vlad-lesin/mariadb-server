@@ -2950,6 +2950,13 @@ bool fil_system_t::create_ext_file() noexcept
     return false;
   }
   ut_ad(ext_bp_file != OS_FILE_CLOSED);
+#ifndef _WIN32 /* On Microsoft Windows, mandatory locking is used */
+  if (!my_disable_locking && os_file_lock(ext_bp_file.m_file, path))
+  {
+    os_file_close_func(ext_bp_file.m_file);
+    return false;
+  }
+#endif
   ret= os_file_set_size(path, ext_bp_file.m_file, ext_bp_size);
   if (!ret)
   {
@@ -2988,12 +2995,31 @@ void IORequest::write_complete(int io_error) const noexcept
   fil_space_t *space;
   if (ext_buf())
   {
-    space= fil_space_t::get(buf_page->id().space());
+    ut_d(fil_space_t *debug_space=) space=
+        fil_space_t::get(buf_page->id().space());
+    DBUG_EXECUTE_IF("ib_ext_bp_remove_space_on_write_complete",
+                    space= nullptr;);
     if (!space)
     {
-      buf_page->write_complete_release(buf_page->state());
       if (slot)
         slot->release();
+      ut_d(auto debug_page_no = buf_page->id().page_no());
+      /* We must hold buf_pool.mutex while releasing the block, so that
+      no other thread can access it before we have freed it. */
+      mysql_mutex_lock(&buf_pool.mutex);
+      buf_page->write_complete_release(buf_page->state());
+      buf_LRU_free_page(buf_page, true, ext_buf_page());
+      mysql_mutex_unlock(&buf_pool.mutex);
+      DBUG_EXECUTE_IF(
+          "ib_ext_bp_remove_space_on_write_complete", if (debug_space) {
+            sql_print_information(
+                "The page number " UINT32PF
+                " was freed after write completion to external "
+                "buffer pool file because the page's space was "
+                "removed.",
+                debug_page_no);
+            debug_space->release();
+          });
       return;
     }
   }
@@ -3014,8 +3040,11 @@ void IORequest::write_complete(int io_error) const noexcept
     else
       ut_ad(type == IORequest::WRITE_ASYNC);
   }
-  else
+  else {
+    DBUG_EXECUTE_IF(
+        "ib_ext_bp_write_io_error", if (ext_buf()) { io_error= 1; });
     buf_page_write_complete(*this, io_error);
+  }
 
   if (!ext_buf())
     space->complete_write();
