@@ -100,7 +100,7 @@ static page_init_result buf_page_init_for_read(const page_id_t page_id,
   buf_page_t *hash_page= buf_pool.page_hash.get<true>(page_id, chain);
   if (hash_page)
   {
-    if (hash_page->external())
+    if (buf_pool.is_page_external(*hash_page))
       ext_buf_page= reinterpret_cast<ext_buf_page_t *>(hash_page);
     else
     {
@@ -125,7 +125,7 @@ static page_init_result buf_page_init_for_read(const page_id_t page_id,
     hash_page= buf_pool.page_hash.get<true>(page_id, chain);
     if (hash_page)
     {
-      if (hash_page->external())
+      if (buf_pool.is_page_external(*hash_page))
         ext_buf_page= reinterpret_cast<ext_buf_page_t *>(hash_page);
       else {
         mysql_mutex_unlock(&buf_pool.mutex);
@@ -197,7 +197,7 @@ static page_init_result buf_page_init_for_read(const page_id_t page_id,
       hash_page= buf_pool.page_hash.get<true>(page_id, chain);
       if (UNIV_LIKELY_NULL(hash_page))
       {
-        if (UNIV_UNLIKELY(hash_page->external()))
+        if (UNIV_UNLIKELY(buf_pool.is_page_external(*hash_page)))
           ext_buf_page= reinterpret_cast<ext_buf_page_t *>(hash_page);
         else
         {

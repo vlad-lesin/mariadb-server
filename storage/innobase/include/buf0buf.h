@@ -463,8 +463,6 @@ class buf_pool_t;
 
 struct buf_page_base_t
 {
-  /** ext_buf_page_t indentifier */
-  static constexpr std::uintptr_t EXT_BUF_FRAME{1};
   // FIXME: fix fil_iterate()
   /** Page id. Protected by buf_pool.page_hash.lock_get() when
   the page is in buf_pool.page_hash. */
@@ -483,8 +481,6 @@ struct buf_page_base_t
       uint16_t free_offset;
     };
   };
-  /** pointer to aligned, uncompressed page frame of innodb_page_size */
-  byte *frame;
 #ifdef UNIV_DEBUG
   /** whether this->LRU is in buf_pool.LRU (in_file());
   protected by buf_pool.mutex */
@@ -497,27 +493,11 @@ struct buf_page_base_t
   bool in_free_list;
 #endif /* UNIV_DEBUG */
   buf_page_base_t() : id_{0} {}
-  buf_page_base_t(const buf_page_base_t &b)
-      : id_(b.id_), hash(b.hash), frame(b.frame)
-#ifdef UNIV_DEBUG
-        ,
-        in_LRU_list(b.in_LRU_list), in_page_hash(b.in_page_hash),
-        in_free_list(b.in_free_list)
-#endif /* UNIV_DEBUG */
-  {
-  }
-
-  bool external() const noexcept
-  {
-    /* TODO: we could just compare the address of the page, as it is done for
-    sentinel pages, and use *frame for something else */
-    return reinterpret_cast<std::uintptr_t>(frame) == EXT_BUF_FRAME;
-  }
+  buf_page_base_t(const buf_page_base_t &)= default;
 };
 
 /* External buffer pool page. The first 3 members (6 for debug build) must be
-the same as in buf_page_t. The "frame" member must always be equal to
-EXT_BUF_FRAME, this is how we determine if some page is external one. */
+the same as in buf_page_t. */
 struct ext_buf_page_t : public buf_page_base_t {
 public:
   /** Node of buf_pool_t::ext_free */
@@ -570,6 +550,8 @@ public:
 
   /** lock covering the contents of frame() */
   block_lock lock;
+  /** pointer to aligned, uncompressed page frame of innodb_page_size */
+  byte *frame;
   /* @} */
   /** ROW_FORMAT=COMPRESSED page; zip.data (but not the data it points to)
   is also protected by buf_pool.mutex */
@@ -1212,13 +1194,20 @@ public:
   and all page hash chains were locked */
   ext_buf_page_t *alloc_ext_page(page_id_t page_id) noexcept;
 
+  /** Checks if some page is external buffer pool page.
+  @param p page
+  @return true if a page is external buffer pool page, false otherwise */
+  bool is_page_external(const buf_page_base_t &p) const {
+    return &p >= ext_buf_pages_array &&
+            &p < ext_buf_pages_array + extended_pages;
+  }
+
   /** Frees external buffer pool page. Pushes a page to the head of external
   buffer pool free list.
   @param p page to free. */
   void free_ext_page(ext_buf_page_t &p) noexcept
   {
-    ut_ad(&p >= ext_buf_pages_array &&
-          &p < ext_buf_pages_array + extended_pages);
+    ut_ad(is_page_external(p));
     mysql_mutex_assert_owner(&mutex);
     UT_LIST_ADD_FIRST(ext_free, &p);
     ut_d(p.in_free_list= true);
@@ -1883,8 +1872,9 @@ inline buf_page_t *buf_pool_t::page_hash_table::get(const page_id_t id,
   for (buf_page_t *bpage= chain.first; bpage; bpage= bpage->hash)
   {
     ut_ad(bpage->in_page_hash);
-    ut_ad(bpage->external() || bpage->in_file());
-    if (bpage->id() == id && (show_ext_pages || !bpage->external()))
+    ut_ad(buf_pool.is_page_external(*bpage) || bpage->in_file());
+    if (bpage->id() == id &&
+        (show_ext_pages || !buf_pool.is_page_external(*bpage)))
       return bpage;
     /* There can be sentinel pages, don't break the loop if external page
     was found and ignored. */

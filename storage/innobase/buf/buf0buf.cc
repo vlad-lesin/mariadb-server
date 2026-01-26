@@ -1499,7 +1499,6 @@ bool buf_pool_t::create() noexcept
   for (ext_buf_page_t *page= ext_buf_pages_array,
                       *end= ext_buf_pages_array + extended_pages;
        page != end; ++page) {
-    page->frame= reinterpret_cast<byte *>(ext_buf_page_t::EXT_BUF_FRAME);
     ut_d(page->in_free_list= true);
     ut_d(page->in_LRU_list= page->in_free_list= false);
     UT_LIST_ADD_LAST(ext_free, page);
@@ -3213,7 +3212,7 @@ retry:
 
   buf_page_t *bpage= buf_pool.page_hash.get<true>(page_id, chain);
 
-  if (bpage && bpage->external()) {
+  if (bpage && buf_pool.is_page_external(*bpage)) {
       page_hash_latch &hash_lock= buf_pool.page_hash.lock_get(chain);
       hash_lock.lock();
       buf_pool.page_hash.remove(chain, bpage);
