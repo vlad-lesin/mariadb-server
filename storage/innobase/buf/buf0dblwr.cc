@@ -87,10 +87,6 @@ bool buf_dblwr_t::create() noexcept
 {
   if (is_created())
     return true;
-  /* Disable external buffer pool flushing for the duration of double write
-  buffer creating, as double write pages will be removed from LRU */
-  ++buf_pool.done_flush_list_waiters_count;
-  SCOPE_EXIT([]() { --buf_pool.done_flush_list_waiters_count; });
   mtr_t mtr{nullptr};
   const ulint size= block_size;
 
