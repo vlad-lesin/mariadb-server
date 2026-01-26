@@ -256,8 +256,8 @@ public:
   dberr_t maybe_punch_hole(os_offset_t off, ulint len) noexcept
   {
     return off && len && (type & (PUNCH ^ WRITE_ASYNC)) && node()
-               ? punch_hole(off, len)
-               : DB_SUCCESS;
+      ? punch_hole(off, len)
+      : DB_SUCCESS;
   }
 
 private:
@@ -272,11 +272,12 @@ private:
     /** File descriptor */
     fil_node_t *const node_ptr= nullptr;
     /** External buffer pool page if the request is for external buffer pool
-    file, nullptr otherwise */
+    file, i.e. the lowest bit of bpage_ptr is set, nullptr otherwise */
     ext_buf_page_t *const ext_buf_page_ptr;
   };
 
-  /** Page to be written on write operation */
+  /** Page to be written on write operation, the lowest bit shows if the
+  request is for external buffer pool or not */
   buf_page_t *const bpage_ptr= nullptr;
 
 public:
@@ -284,24 +285,25 @@ public:
   /** Memory to be used for encrypted or page_compressed pages */
   buf_tmp_buffer_t *const slot= nullptr;
 
-  buf_page_t *bpage() const
+  buf_page_t *bpage() const noexcept
   {
     return reinterpret_cast<buf_page_t *>(
         reinterpret_cast<ptrdiff_t>(bpage_ptr) & ~ptrdiff_t(1));
   };
 
-  bool ext_buf() const
+  bool ext_buf() const noexcept
   {
     return reinterpret_cast<ptrdiff_t>(bpage_ptr) & 1;
   }
 
-  fil_node_t *node() const
+  fil_node_t *node() const noexcept
   {
     ut_ad(!ext_buf());
     return node_ptr;
   }
 
-  ext_buf_page_t *ext_buf_page() const {
+  ext_buf_page_t *ext_buf_page() const noexcept
+  {
     ut_ad(ext_buf());
     return ext_buf_page_ptr;
   };
