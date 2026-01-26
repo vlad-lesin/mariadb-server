@@ -356,8 +356,7 @@ void buf_page_write_complete(const IORequest &request, bool error) noexcept
         if (fil_space_t *space= fil_space_t::get(bpage->id_.space()))
         {
           auto space_name= space->name();
-          if (fil_page_get_type(bpage->frame) == FIL_PAGE_INDEX &&
-              space_name.data() &&
+          if (space_name.data() &&
               !strncmp(space_name.data(), "test/t.ibd", space_name.size()))
           {
             ++buf_pool.stat.n_pages_written_to_ebp;
@@ -1360,9 +1359,9 @@ static void buf_flush_LRU_list_batch(ulint max, flush_counters_t *n,
       }
       else
       {
-      #if !defined(DBUG_OFF)
+#if !defined(DBUG_OFF)
       free_page:
-      #endif
+#endif
         buf_LRU_free_page(bpage, true);
         ++n->evicted;
       }

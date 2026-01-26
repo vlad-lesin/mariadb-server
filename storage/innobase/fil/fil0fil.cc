@@ -3070,16 +3070,27 @@ void IORequest::read_complete(int io_error) const noexcept
     buf_pool.free_ext_page(*ext_buf_page());
     mysql_mutex_unlock(&buf_pool.mutex);
     /* The space will be released at the end of this function */
-    space= fil_space_t::get(buf_page->id().space());
+    ut_d(fil_space_t *debug_space=) space=
+        fil_space_t::get(buf_page->id().space());
+    DBUG_EXECUTE_IF("ib_ext_bp_remove_space_on_read_complete",
+                    space= nullptr;);
     if (!space) {
       buf_pool.corrupted_evict(buf_page, buf_page_t::READ_FIX + 1, false);
-      ++buf_pool.stat.n_pages_read_from_ebp;
+      DBUG_EXECUTE_IF(
+          "ib_ext_bp_remove_space_on_read_complete", if (debug_space) {
+            sql_print_information(
+                "The page number " UINT32PF
+                " was freed after read completion to external "
+                "buffer pool file because the page's space was "
+                "removed.",
+                buf_page->id().page_no());
+            debug_space->release();
+          });
       return;
     }
     ut_d(if (DBUG_IF("ib_ext_bp_count_io_only_for_t")) {
       auto space_name= space->name();
-      if (fil_page_get_type(buf_page->frame) == FIL_PAGE_INDEX &&
-          space_name.data() &&
+      if (space_name.data() &&
           !strncmp(space_name.data(), "test/t.ibd", space_name.size()))
       {
         ++buf_pool.stat.n_pages_read_from_ebp;
@@ -3092,6 +3103,8 @@ void IORequest::read_complete(int io_error) const noexcept
 
   const page_id_t id(buf_page->id());
   const bool in_recovery{recv_sys.recovery_on};
+
+  DBUG_EXECUTE_IF("ib_ext_bp_read_io_error", if (ext_buf()) { io_error= 1; });
 
   if (UNIV_UNLIKELY(io_error != 0))
   {

@@ -437,8 +437,7 @@ buf_read_page_low(
       {
         ut_d(if (DBUG_IF("ib_ext_bp_count_io_only_for_t")) {
           auto space_name= space->name();
-          if (fil_page_get_type(bpage->frame) == FIL_PAGE_INDEX &&
-              space_name.data() &&
+          if (space_name.data() &&
               !strncmp(space_name.data(), "test/t.ibd", space_name.size()))
             ++buf_pool.stat.n_pages_read_from_ebp;
         } else)++ buf_pool.stat.n_pages_read_from_ebp;
@@ -454,8 +453,13 @@ buf_read_page_low(
     auto err= fil_system.ext_bp_io(*bpage, *init_page_result.ext_buf_page,
                                    IORequest::READ_ASYNC, nullptr, len, dst);
     space->release();
+    DBUG_EXECUTE_IF("ib_ext_bp_read_io_error", { err= DB_IO_ERROR; });
     if (UNIV_LIKELY(DB_SUCCESS == err))
       return reinterpret_cast<buf_page_t *>(-1);
+    sql_print_warning("InnoDB: There was IO error during syncronous read from "
+                      "external buffer pool file, external buffer pool is "
+                      "disabled.");
+    fil_system.ext_buf_pool_disable();
   }
   else if (UNIV_LIKELY(DB_SUCCESS ==
                        space
