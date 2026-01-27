@@ -1350,8 +1350,9 @@ static void buf_flush_LRU_list_batch(ulint max, flush_counters_t *n,
           });
       // FIXME: currently every second page is flushed, consider more
       // suitable algorithm there
-      if (!recv_recovery_is_on() && state != buf_page_t::FREED &&
-          fil_system.ext_bp_size && !buf_pool.done_flush_list_waiters_count &&
+      if (!opt_bootstrap && !recv_recovery_is_on() &&
+          state != buf_page_t::FREED && fil_system.ext_bp_size &&
+          !buf_pool.done_flush_list_waiters_count &&
           (ut_d(buf_pool.force_LRU_eviction_to_ebp ||)((++free_or_flush) & 1)))
       {
         flush_to_ebp= true;

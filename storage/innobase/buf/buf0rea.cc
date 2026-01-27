@@ -194,6 +194,7 @@ static page_init_result buf_page_init_for_read(const page_id_t page_id,
     check the page_hash again, as it may have been modified. */
     if (UNIV_UNLIKELY(lru))
     {
+      ext_buf_page= nullptr;
       hash_page= buf_pool.page_hash.get<true>(page_id, chain);
       if (UNIV_LIKELY_NULL(hash_page))
       {

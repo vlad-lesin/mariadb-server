@@ -2746,11 +2746,13 @@ os_file_read_func(
   if (ulint(n_bytes) == n || err != DB_SUCCESS)
     return err;
 
-  os_file_handle_error_no_exit(type.node() ? type.node()->name : nullptr,
-                               "read", false);
+  const char *node_name= type.ext_buf()
+                             ? ext_bp_file_name
+                             : (type.node() ? type.node()->name : nullptr);
+  os_file_handle_error_no_exit(node_name, "read", false);
   sql_print_error("InnoDB: Tried to read %zu bytes at offset %" PRIu64
                   " of file %s, but was only able to read %zd",
-                  n, offset, type.node() ? type.node()->name : "(unknown)",
+                  n, offset, node_name ? node_name : "(unknown)",
                   n_bytes);
 
   return err ? err : DB_IO_ERROR;
@@ -3373,7 +3375,7 @@ dberr_t os_aio(const IORequest &type, void *buf, os_offset_t offset,
   ut_ad(type.node()->is_open());
   dberr_t err=
       os_aio(type, buf, offset, n, type.node()->handle, type.node()->name);
-  if (err == DB_IO_ERROR)
+  if (err == DB_IO_ERROR && type.is_async())
     type.node()->space->release();
   return err;
 }

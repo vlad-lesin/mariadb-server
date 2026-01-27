@@ -1450,7 +1450,10 @@ public:
 
   /** Extended buffer pool file size, equals to 0 if extended buffer pool is
   not used. */
-  size_t ext_bp_size;
+  union {
+    Atomic_relaxed<size_t> ext_bp_size;
+    size_t ext_bp_size_non_atomic;
+  };
 
   /** Map of fil_space_t::id to fil_space_t* */
   hash_table_t spaces;
@@ -1872,4 +1875,6 @@ ulint fil_space_get_block_size(const fil_space_t* space, unsigned offset)
 bool fil_crypt_check(fil_space_crypt_t *crypt_data, const char *f_name)
   noexcept;
 
+/* External buffer pool file name */
+extern const char *ext_bp_file_name;
 #endif /* UNIV_INNOCHECKSUM */

@@ -3727,12 +3727,13 @@ static MYSQL_SYSVAR_UINT(log_write_ahead_size, log_sys.write_size,
   "Redo log write size to avoid read-on-write; must be a power of two",
   nullptr, nullptr, 512, 512, 4096, 1);
 
-static MYSQL_SYSVAR_SIZE_T(extended_buffer_pool_size, fil_system.ext_bp_size,
-  PLUGIN_VAR_RQCMDARG,
-  "The extended buffer pool file size",
-  nullptr, innodb_extended_buffer_pool_size_update,
-  // TODO: set correct min and max values here.
-  0, 0, SIZE_T_MAX, 0);
+static MYSQL_SYSVAR_SIZE_T(extended_buffer_pool_size,
+                           fil_system.ext_bp_size_non_atomic,
+                           PLUGIN_VAR_RQCMDARG,
+                           "The extended buffer pool file size", nullptr,
+                           innodb_extended_buffer_pool_size_update,
+                           // TODO: set correct min and max values here.
+                           0, 0, SIZE_T_MAX, 0);
 
 static MYSQL_SYSVAR_STR(extended_buffer_pool_path, fil_system.ext_bp_path,
   PLUGIN_VAR_RQCMDARG | PLUGIN_VAR_READONLY,

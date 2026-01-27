@@ -2962,7 +2962,7 @@ bool fil_system_t::create_ext_file() noexcept
   {
     os_file_close_func(ext_bp_file.m_file);
     sql_print_error("Cannot set extended buffer pool file '%s' size to %zum",
-                    path, ext_bp_size);
+                    path, ext_bp_size_non_atomic);
     return false;
   }
   return true;
