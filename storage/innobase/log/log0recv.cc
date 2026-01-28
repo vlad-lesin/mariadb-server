@@ -3584,7 +3584,7 @@ func_exit:
 
 void IORequest::fake_read_complete(os_offset_t offset) const noexcept
 {
-  ut_ad(node());
+  ut_ad(!ext_buf() && node_ptr);
   ut_ad(is_read());
   ut_ad(bpage_ptr);
   ut_ad(bpage_ptr->frame);
@@ -3618,7 +3618,7 @@ void IORequest::fake_read_complete(os_offset_t offset) const noexcept
   recs.being_processed= -1;
   ut_ad(mtr.has_committed());
 
-  node()->space->release();
+  node_ptr->space->release();
 }
 
 /** @return whether a page has been freed */

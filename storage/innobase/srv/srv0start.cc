@@ -1435,8 +1435,12 @@ dberr_t srv_start(bool create_new_db)
 	}
 
 	if (srv_operation == SRV_OPERATION_NORMAL
-	    && fil_system.ext_bp_size && !fil_system.create_ext_file())
+	    && !opt_bootstrap && fil_system.ext_buf_pool_enabled()
+	    && !fil_system.create_ext_file())
 		return(srv_init_abort(DB_ERROR));
+
+	size_t saved_ext_bp_size= fil_system.ext_bp_size;
+	fil_system.ext_buf_pool_disable();
 
 	log_sys.create();
 	recv_sys.create();
@@ -2036,6 +2040,9 @@ skip_monitors:
 
 		srv_started_redo = true;
 	}
+
+	if (!opt_bootstrap)
+	  fil_system.ext_bp_size= saved_ext_bp_size;
 
 	return(DB_SUCCESS);
 }

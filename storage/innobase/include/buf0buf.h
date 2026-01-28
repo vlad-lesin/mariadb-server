@@ -1199,7 +1199,7 @@ public:
   @return true if a page is external buffer pool page, false otherwise */
   bool is_page_external(const buf_page_base_t &p) const {
     return &p >= ext_buf_pages_array &&
-            &p < ext_buf_pages_array + extended_pages;
+           &p < ext_buf_pages_array + extended_pages;
   }
 
   /** Frees external buffer pool page. Pushes a page to the head of external
@@ -1651,11 +1651,6 @@ public:
   /** broadcast when a batch completes; protected by flush_list_mutex */
   pthread_cond_t done_flush_list;
 
-  /** The number of threads waiting for done_flush_list, must be set before
-  page cleaner wake up and reset after done_flush_list waiting is finished,
-  protected with flush_list_mutex */
-  size_t done_flush_list_waiters_count;
-
   /** @return number of pending LRU flush */
   unsigned n_flush() const noexcept
   {
@@ -1730,6 +1725,18 @@ public:
 					to read this for heuristic
 					purposes without holding any
 					mutex or latch */
+
+  /** The number of threads waiting for done_flush_list, must be set before
+  page cleaner wake up and reset after done_flush_list waiting is finished,
+  protected with flush_list_mutex. The counter is needed to disable pages
+  eviction to external buffer pool to avoid extra waits for the threads waiting
+  on done_flush_list.
+  A ptype/o buf_pool on GDB reveals that storing the counter right after
+  freed_page_clock improves the storage layout of buf_pool on AMD64 GNU/Linux,
+  because then buf_pool.free will not span multiple cache lines but start at
+  offset 1024. */
+  size_t done_flush_list_waiters_count;
+
   /** Cleared when buf_LRU_get_free_block() fails.
   Set whenever the free list grows, along with a broadcast of done_free.
   Protected by buf_pool.mutex. */

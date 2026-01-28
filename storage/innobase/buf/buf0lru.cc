@@ -736,10 +736,12 @@ ROW_FORMAT=COMPRESSED page, the buf_page_t object will be freed as well.
 The caller must hold buf_pool.mutex.
 @param bpage      block to be freed
 @param zip        whether to remove both copies of a ROW_FORMAT=COMPRESSED page
+@param ext_buf_page pointer to external buffer pool page to replace with bpage
+                    in page hash
 @retval true if freed and buf_pool.mutex may have been temporarily released
 @retval false if the page was not freed */
 bool buf_LRU_free_page(buf_page_t *bpage, bool zip,
-    ext_buf_page_t *ext_buf_page)
+                       ext_buf_page_t *ext_buf_page)
 {
 	const page_id_t id{bpage->id()};
 	buf_page_t*	b = nullptr;
