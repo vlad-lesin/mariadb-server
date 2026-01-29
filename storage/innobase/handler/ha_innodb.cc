@@ -3678,8 +3678,6 @@ static void innodb_force_LRU_eviction_set(THD *, st_mysql_sys_var *, void *,
     buf_pool.page_cleaner_wakeup(true);
     my_cond_wait(&buf_pool.done_flush_list,
                  &buf_pool.flush_list_mutex.m_mutex);
-    mysql_mutex_unlock(&buf_pool.flush_list_mutex);
-    mysql_mutex_lock(&buf_pool.flush_list_mutex);
     buf_pool.page_cleaner_wakeup(true);
     my_cond_wait(&buf_pool.done_flush_list,
                  &buf_pool.flush_list_mutex.m_mutex);

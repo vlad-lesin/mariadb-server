@@ -3362,10 +3362,10 @@ static ST_FIELD_INFO i_s_innodb_buffer_stats_fields_info[]=
   Column("UNCOMPRESS_CURRENT", ULonglong(), NOT_NULL),
 
 #define IDX_BUF_STATS_PAGE_WRITTEN_TO_EBP	32
-  Column("NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL",ULonglong(), NOT_NULL),
+  Column("PAGES_EXTERNALLY_WRITTEN",ULonglong(), NOT_NULL),
 
 #define IDX_BUF_STATS_PAGE_READ_FROM_EBP	33
-  Column("NUMBER_PAGES_READ_FROM_EXTERNAL_BUFFER_POOL",ULonglong(), NOT_NULL),
+  Column("PAGES_EXTERNALLY_READ",ULonglong(), NOT_NULL),
 
   CEnd()
 };

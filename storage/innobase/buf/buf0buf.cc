@@ -1287,34 +1287,6 @@ buf_block_t *buf_pool_t::allocate() noexcept
   return nullptr;
 }
 
-ext_buf_page_t *buf_pool_t::alloc_ext_page(page_id_t page_id) noexcept
-{
-  mysql_mutex_assert_owner(&mutex);
-  ext_buf_page_t *p;
-  if ((p= UT_LIST_GET_FIRST(ext_free)))
-    UT_LIST_REMOVE(ext_free, p);
-  else if ((p= UT_LIST_GET_LAST(ext_LRU))) {
-    for (; p; p= UT_LIST_GET_PREV(ext_LRU_list, p)) {
-      hash_chain &hash_chain= page_hash.cell_get(p->id_.fold());
-      page_hash_latch &hash_lock= page_hash.lock_get(hash_chain);
-      if (!hash_lock.try_lock())
-        continue;
-      UT_LIST_REMOVE(ext_LRU, p);
-      page_hash.remove(hash_chain, reinterpret_cast<buf_page_t *>(p));
-      hash_lock.unlock();
-      break;
-    }
-    if (!p)
-      return nullptr;
-  }
-  else
-    return nullptr;
-  p->id_= page_id;
-  ut_d(p->in_LRU_list= p->in_free_list= false);
-  ut_d(p->in_page_hash= true);
-  return p;
-}
-
 /** Create the hash table.
 @param n  the lower bound of n_cells */
 void buf_pool_t::page_hash_table::create(ulint n) noexcept
@@ -1641,6 +1613,7 @@ void buf_pool_t::close() noexcept
   }
 
   my_free(ext_buf_pages_array);
+  ext_buf_pages_array= nullptr;
 
   pthread_cond_destroy(&done_flush_LRU);
   pthread_cond_destroy(&done_flush_list);
@@ -3212,20 +3185,21 @@ retry:
 
   buf_page_t *bpage= buf_pool.page_hash.get<true>(page_id, chain);
 
-  if (bpage && buf_pool.is_page_external(*bpage)) {
-      page_hash_latch &hash_lock= buf_pool.page_hash.lock_get(chain);
-      hash_lock.lock();
-      buf_pool.page_hash.remove(chain, bpage);
-      hash_lock.unlock();
-      ut_ad(!bpage->in_page_hash);
-      ext_buf_page_t *ext_buf_page=
-        reinterpret_cast<ext_buf_page_t *>(bpage);
-      buf_pool.remove_ext_page_from_LRU(*ext_buf_page);
-      buf_pool.free_ext_page(*ext_buf_page);
-      bpage= nullptr;
+  if (!bpage)
+    /* not found */;
+  else if (buf_pool.is_page_external(*bpage))
+  {
+    page_hash_latch &hash_lock= buf_pool.page_hash.lock_get(chain);
+    hash_lock.lock();
+    buf_pool.page_hash.remove(chain, bpage);
+    hash_lock.unlock();
+    ut_ad(!bpage->in_page_hash);
+    ext_buf_page_t *ext_buf_page= reinterpret_cast<ext_buf_page_t *>(bpage);
+    buf_pool.remove_ext_page_from_LRU(*ext_buf_page);
+    buf_pool.free_ext_page(*ext_buf_page);
+    bpage= nullptr;
   }
-
-  if (bpage)
+  else
   {
 #ifdef BTR_CUR_HASH_ADAPT
     const dict_index_t *drop_hash_entry= nullptr;

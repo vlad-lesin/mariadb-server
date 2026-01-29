@@ -288,16 +288,26 @@ void buf_page_t::write_complete(space_type type, bool error,
 
   if (UNIV_LIKELY(!error))
   {
-    bool persistent = (type == PERSISTENT);
-    ut_d(lsn_t om= oldest_modification());
-    ut_ad(type == EXT_BUF || om >= 2);
-    ut_ad(persistent == (om > 2));
-    ut_ad(type != EXT_BUF || !oldest_modification());
-    /* We use release memory order to guarantee that callers of
-    oldest_modification_acquire() will observe the block as
-    being detached from buf_pool.flush_list, after reading the value 0. */
-    if (type != EXT_BUF)
-      oldest_modification_.store(persistent, std::memory_order_release);
+    lsn_t om ut_d(= oldest_modification());
+    switch (type)
+    {
+    case PERSISTENT:
+      ut_ad(om > 2);
+      om= 1;
+      goto clear_modification;
+    case TEMPORARY:
+      ut_ad(om == 2);
+      om= 0;
+    clear_modification:
+      /* We use release memory order to guarantee that callers of
+      oldest_modification_acquire() will observe the block as
+      being detached from buf_pool.flush_list, after reading the value 0. */
+      oldest_modification_.store(om, std::memory_order_release);
+      break;
+    case EXT_BUF:
+      ut_ad(om == 0);
+      break;
+    }
   }
   write_complete_release(state);
 }
@@ -343,6 +353,8 @@ void buf_page_write_complete(const IORequest &request, bool error) noexcept
   mysql_mutex_assert_not_owner(&buf_pool.mutex);
   mysql_mutex_assert_not_owner(&buf_pool.flush_list_mutex);
 
+  static_assert(buf_page_t::PERSISTENT == 0, "");
+  static_assert(buf_page_t::TEMPORARY == 1, "");
   buf_page_t::space_type type= request.ext_buf()
                                    ? buf_page_t::EXT_BUF
                                    : static_cast<buf_page_t::space_type>(
@@ -756,6 +768,31 @@ ATTRIBUTE_COLD void buf_pool_t::release_freed_page(buf_page_t *bpage) noexcept
   buf_LRU_free_page(bpage, true);
 }
 
+inline ext_buf_page_t *buf_pool_t::alloc_ext_page(page_id_t page_id) noexcept
+{
+  mysql_mutex_assert_owner(&mutex);
+  ext_buf_page_t *p;
+  if ((p= UT_LIST_GET_FIRST(ext_free)))
+    UT_LIST_REMOVE(ext_free, p);
+  else if ((p= UT_LIST_GET_LAST(ext_LRU))) {
+      hash_chain &hash_chain= page_hash.cell_get(p->id_.fold());
+      page_hash_latch &hash_lock= page_hash.lock_get(hash_chain);
+      UT_LIST_REMOVE(ext_LRU, p);
+      /* The correct lock order is to acquire buf_pool.mutex first and then a
+      latch on a buf_pool.page_hash slice. We can just wait for the hash_lock
+      on the last element of buf_pool.ext_LRU_list. */
+      hash_lock.lock();
+      page_hash.remove(hash_chain, reinterpret_cast<buf_page_t *>(p));
+      hash_lock.unlock();
+  }
+  else
+    return nullptr;
+  p->id_= page_id;
+  ut_d(p->in_LRU_list= p->in_free_list= false);
+  ut_d(p->in_page_hash= true);
+  return p;
+}
+
 /** Write a flushable page to a file or free a freeable block.
 @param space       tablespace
 @param to_ext_buf  whether to write the page to external buffer pull file
@@ -763,6 +800,7 @@ ATTRIBUTE_COLD void buf_pool_t::release_freed_page(buf_page_t *bpage) noexcept
 bool buf_page_t::flush(fil_space_t *space, bool to_ext_buf) noexcept
 {
   mysql_mutex_assert_not_owner(&buf_pool.flush_list_mutex);
+  ut_ad(!to_ext_buf || !oldest_modification());
   ut_ad(in_file());
   ut_ad(in_LRU_list);
   ut_ad((space->is_temporary()) == (space == fil_system.temp_space));
@@ -773,16 +811,14 @@ bool buf_page_t::flush(fil_space_t *space, bool to_ext_buf) noexcept
   const lsn_t lsn=
     mach_read_from_8(my_assume_aligned<8>
                      (FIL_PAGE_LSN + (zip.data ? zip.data : frame)));
-  ut_ad(to_ext_buf ||
+  ut_ad(to_ext_buf ? !oldest_modification() :
         (lsn ? lsn >= oldest_modification() || oldest_modification() == 2
              : (space->is_temporary() || space->is_being_imported())));
 
   if (s < UNFIXED)
   {
     ut_a(s >= FREED);
-    if (to_ext_buf)
-      return false;
-    if (!space->is_temporary() && !space->is_being_imported())
+    if (!to_ext_buf && !space->is_temporary() && !space->is_being_imported())
     {
     freed:
       if (lsn > log_sys.get_flushed_lsn())
@@ -888,11 +924,9 @@ bool buf_page_t::flush(fil_space_t *space, bool to_ext_buf) noexcept
     write_frame= page;
   }
 
-  if (to_ext_buf) {
-    ut_ad(ext_page);
+  if (ext_page)
     fil_system.ext_bp_io(*this, *ext_page, IORequest::WRITE_ASYNC, slot, size,
                          write_frame);
-  }
   else if ((s & LRU_MASK) == REINIT || !space->use_doublewrite())
   {
     if (!space->is_temporary() && !space->is_being_imported() &&
@@ -1375,81 +1409,86 @@ static void buf_flush_LRU_list_batch(ulint max, flush_counters_t *n,
     }
 
 flush_to_ebp:
-  if ((flush_to_ebp || state < buf_page_t::READ_FIX) &&
-      bpage->lock.u_lock_try(true))
-  {
-    ut_ad(!bpage->is_io_fixed());
-    switch (bpage->oldest_modification())
+    if (state < buf_page_t::READ_FIX && bpage->lock.u_lock_try(true))
     {
-    case 1:
-      mysql_mutex_lock(&buf_pool.flush_list_mutex);
-      if (ut_d(lsn_t lsn=) bpage->oldest_modification())
+      ut_ad(!bpage->is_io_fixed());
+      switch (bpage->oldest_modification())
       {
-        ut_ad(lsn == 1); /* It must be clean while we hold bpage->lock */
-        buf_pool.delete_from_flush_list(bpage);
-      }
-      mysql_mutex_unlock(&buf_pool.flush_list_mutex);
-      /* fall through */
-    case 0:
-      if (!flush_to_ebp)
-      {
-        bpage->lock.u_unlock(true);
-        goto evict;
-      }
-      break;
-    case 2:
-      /* LRU flushing will always evict pages of the temporary tablespace,
-      in buf_page_write_complete(). */
-      ++n->evicted;
-      /* fall through */
-    default:
-      /* bpage->oldest_modification() could be changed from 0 to not 0 while
-      bpage was unlocked, in this case we just flush the page to its space */
-      flush_to_ebp= false;
-    }
-    /* Block is ready for flush. Dispatch an IO request. */
-    const page_id_t page_id(bpage->id());
-    const uint32_t space_id= page_id.space();
-    if (!space || space->id != space_id)
-    {
-      if (last_space_id != space_id)
-      {
-        buf_pool.lru_hp.set(bpage);
-        mysql_mutex_unlock(&buf_pool.mutex);
-        if (space)
-          space->release();
-        auto p= buf_flush_space(space_id);
-        space= p.first;
-        last_space_id= space_id;
-        if (!space)
+      case 1:
+        mysql_mutex_lock(&buf_pool.flush_list_mutex);
+        if (ut_d(lsn_t lsn=) bpage->oldest_modification())
         {
+          ut_ad(lsn == 1); /* It must be clean while we hold bpage->lock */
+          buf_pool.delete_from_flush_list(bpage);
+        }
+        mysql_mutex_unlock(&buf_pool.flush_list_mutex);
+        /* fall through */
+      case 0:
+        if (!flush_to_ebp)
+        {
+          bpage->lock.u_unlock(true);
+          goto evict;
+        }
+        break;
+      case 2:
+        /* LRU flushing will always evict pages of the temporary tablespace,
+        in buf_page_write_complete(). */
+        ++n->evicted;
+        /* fall through */
+      default:
+        /* The `flush_to_ebp` flag is set under `!bpage->oldest_modification()`
+        condition. When the condition is checked the page is unlocked. It
+        doesn't matter for the cases when `bpage->oldest_modification()!=0`.
+        But it matters when `bpage->oldest_modification()==0`, because the
+        oldest modification can be changed between the moment we checked it and
+        the moment the page is locked. That's why we reset `flush_to_ebp` flag
+        and let the page be flushed to its space instead of external buffer
+        pool file. */
+        flush_to_ebp= false;
+      }
+      /* Block is ready for flush. Dispatch an IO request. */
+      const page_id_t page_id(bpage->id());
+      const uint32_t space_id= page_id.space();
+      if (!space || space->id != space_id)
+      {
+        if (last_space_id != space_id)
+        {
+          buf_pool.lru_hp.set(bpage);
+          mysql_mutex_unlock(&buf_pool.mutex);
+          if (space)
+            space->release();
+          auto p= buf_flush_space(space_id);
+          space= p.first;
+          last_space_id= space_id;
+          if (!space)
+          {
+            mysql_mutex_lock(&buf_pool.mutex);
+            goto no_space;
+          }
           mysql_mutex_lock(&buf_pool.mutex);
+          buf_pool.stat.n_pages_written+= p.second;
+        }
+        else
+        {
+          ut_ad(!space);
           goto no_space;
         }
-        mysql_mutex_lock(&buf_pool.mutex);
-        buf_pool.stat.n_pages_written+= p.second;
       }
-      else
+      else if (space->is_stopping_writes())
       {
-        ut_ad(!space);
-        goto no_space;
+        space->release();
+        space= nullptr;
+      no_space:
+        if (flush_to_ebp && !bpage->oldest_modification()) {
+          bpage->lock.u_unlock(true);
+          buf_LRU_free_page(bpage, true);
+        } else {
+          mysql_mutex_lock(&buf_pool.flush_list_mutex);
+          buf_flush_discard_page(bpage);
+        }
+        ++n->evicted;
+        continue;
       }
-    }
-    else if (space->is_stopping_writes())
-    {
-      space->release();
-      space= nullptr;
-    no_space:
-      if (flush_to_ebp && !bpage->oldest_modification()) {
-        bpage->lock.u_unlock(true);
-        buf_LRU_free_page(bpage, true);
-      } else {
-        mysql_mutex_lock(&buf_pool.flush_list_mutex);
-        buf_flush_discard_page(bpage);
-      }
-      ++n->evicted;
-      continue;
-    }
 
       if (!flush_to_ebp && state < buf_page_t::UNFIXED)
         goto flush;

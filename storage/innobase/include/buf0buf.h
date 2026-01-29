@@ -496,10 +496,22 @@ struct buf_page_base_t
   buf_page_base_t(const buf_page_base_t &)= default;
 };
 
-/* External buffer pool page. The first 3 members (6 for debug build) must be
-the same as in buf_page_t. */
+/* External buffer pool page.
+FIXME: What if we declared the two UT_LIST_NODE_T right after
+buf_page_base_t::id_. Currently, this is a little awkward, because the in_
+debug predicates are in buf_page_base_t while the actual list nodes are stored
+at different offsets of the derived objects.
+  If we had the two UT_LIST_NODE_T directly in the base object, then both types
+of objects could be accessed in the same way. This should also make debugging
+more convenient.
+  However, adding two UT_LIST_NODE_T to the start would move
+offsetof(buf_page_t::frame) to 64, which would be a different cache line from
+id_ and lock. We might compensate for that by swapping frame and
+oldest_modification_.
+  We don't need a doubly-linked list for buf_pool.free, we could have
+sizeof(ext_buf_page_t)=24 and everything up to buf_page_t::frame would fit in
+a single 64-byte AMD64 cache line. */
 struct ext_buf_page_t : public buf_page_base_t {
-public:
   /** Node of buf_pool_t::ext_free */
   UT_LIST_NODE_T(ext_buf_page_t) free_list;
   /** Node of buf_pool_t::ext_LRU */
@@ -1160,6 +1172,13 @@ class buf_pool_t
   ext_buf_page_t *ext_buf_pages_array;
   /** External buffer pool pages free list, protected with buf_pool.mutex */
   UT_LIST_BASE_NODE_T(ext_buf_page_t) ext_free;
+  /* FIXME:  Could we avoid the buf_pool.mutex here, and avoid having the
+  buf_pool.ext_free list as well? We would simply identify freed blocks with an
+  atomic acquire/release version of id_.is_corrupted() and id_.set_corrupted().
+  In that way, freeing blocks would be fast, but allocation would have to
+  sweep the entire extended buffer pool until an empty slot is found.
+  There could perhaps be a "cursor" to quickly locate the next available empty
+  slot. */
 
 public:
   /** The requested innodb_buffer_pool_size */
@@ -1192,7 +1211,7 @@ public:
   @param page_id page id which will be assigned to allocated page
   @return allocated external buffer pool page or nullptr if free list is empty
   and all page hash chains were locked */
-  ext_buf_page_t *alloc_ext_page(page_id_t page_id) noexcept;
+  inline ext_buf_page_t *alloc_ext_page(page_id_t page_id) noexcept;
 
   /** Checks if some page is external buffer pool page.
   @param p page
@@ -1205,20 +1224,19 @@ public:
   /** Frees external buffer pool page. Pushes a page to the head of external
   buffer pool free list.
   @param p page to free. */
-  void free_ext_page(ext_buf_page_t &p) noexcept
+  void free_ext_page(ext_buf_page_t &ext_page) noexcept
   {
-    ut_ad(is_page_external(p));
+    ut_ad(is_page_external(ext_page));
     mysql_mutex_assert_owner(&mutex);
-    UT_LIST_ADD_FIRST(ext_free, &p);
-    ut_d(p.in_free_list= true);
+    UT_LIST_ADD_FIRST(ext_free, &ext_page);
+    ut_d(ext_page.in_free_list= true);
   }
 
   /** Pushes external buffer pool page to the head of external buffer pool LRU
   list.
   @param ext_page page to push */
   void push_ext_page_to_LRU(ext_buf_page_t &ext_page) noexcept {
-    ut_ad(&ext_page >= ext_buf_pages_array &&
-          &ext_page < ext_buf_pages_array + extended_pages);
+    ut_ad(is_page_external(ext_page));
       mysql_mutex_assert_owner(&mutex);
       UT_LIST_ADD_FIRST(ext_LRU, &ext_page);
       ut_d(ext_page.in_LRU_list= true);
@@ -1227,8 +1245,7 @@ public:
   /** Removes external buffer pool page from external buffer pool LRU list.
   @param ext_page page to remove */
   void remove_ext_page_from_LRU(ext_buf_page_t &ext_page) noexcept {
-    ut_ad(&ext_page >= ext_buf_pages_array &&
-          &ext_page < ext_buf_pages_array + extended_pages);
+    ut_ad(is_page_external(ext_page));
       mysql_mutex_assert_owner(&mutex);
       UT_LIST_REMOVE(ext_LRU, &ext_page);
       ut_d(ext_page.in_LRU_list= false);
@@ -1238,8 +1255,7 @@ public:
   @param ext_page page for which offset is calulated
   @return offset in external biffer pool file */
   os_offset_t ext_page_offset(const ext_buf_page_t &ext_page) const noexcept {
-    ut_ad(&ext_page >= ext_buf_pages_array &&
-          &ext_page < ext_buf_pages_array + extended_pages);
+    ut_ad(is_page_external(ext_page));
     return (&ext_page - ext_buf_pages_array) << srv_page_size_shift;
   }
 
@@ -1880,11 +1896,11 @@ inline buf_page_t *buf_pool_t::page_hash_table::get(const page_id_t id,
   {
     ut_ad(bpage->in_page_hash);
     ut_ad(buf_pool.is_page_external(*bpage) || bpage->in_file());
-    if (bpage->id() == id &&
-        (show_ext_pages || !buf_pool.is_page_external(*bpage)))
-      return bpage;
-    /* There can be sentinel pages, don't break the loop if external page
-    was found and ignored. */
+    if (bpage->id() == id) {
+      if (show_ext_pages || !buf_pool.is_page_external(*bpage))
+        return bpage;
+      break;
+    }
   }
   return nullptr;
 }
