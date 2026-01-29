@@ -59,11 +59,10 @@ i/o-fixed buffer blocks */
 
 /** The result, returned by buf_page_init_for_read() */
 struct page_init_result {
-/*  page_init_result() : bpage(nullptr), ext_buf_page(nullptr) {} */
-  bool in_ext_buffer_pool() const noexcept { return ext_buf_page; }
-  buf_page_t* bpage; /* Initialized page */
-  ext_buf_page_t *ext_buf_page; /* External buffer pool page if bpage can be
-                               read from from exretnal buffer pool file */
+  /** initialized page descriptor and uninitialized frame */
+  buf_page_t* bpage;
+  /** external buffer pool page if the page can be read from ext_bp */
+  ext_buf_page_t *ext_read;
 };
 
 /** Initialize a page for read to the buffer buf_pool. If the page is
@@ -78,7 +77,7 @@ and the lock released later.
                   bitwise-ORed with 1 in recovery
 @param chain      buf_pool.page_hash cell for page_id
 @param block      preallocated buffer block (set to nullptr if consumed)
-@retval           page_init_result::bpage == nullptr in case of an error,
+@retval           {nullptr,nullptr} in case of an error,
                   otherwise
                   page_init_result::bpage points to initialized page and
                   the first bit of page_init_result::bpage is set only if the
@@ -253,10 +252,11 @@ static page_init_result buf_page_init_for_read(const page_id_t page_id,
     buf_LRU_add_block(bpage, true/* to old blocks */);
   }
 
+
+  ut_ad(!bpage || bpage->in_file());
   if (!ext_buf_page)
     buf_pool.stat.n_pages_read++;
-  ut_ad(!bpage || bpage->in_file());
-  if (ext_buf_page && !fil_system.ext_buf_pool_enabled())
+  else if (!fil_system.ext_buf_pool_enabled())
   {
     buf_pool.free_ext_page(*ext_buf_page);
     ext_buf_page= nullptr;
@@ -349,7 +349,7 @@ buf_read_page_low(
   buf_page_t *bpage= init_page_result.bpage;
   if (UNIV_UNLIKELY(!bpage))
   {
-    ut_ad(!init_page_result.ext_buf_page);
+    ut_ad(!init_page_result.ext_read);
     goto fail;
   }
   const bool exist(uintptr_t(bpage) & 1);
@@ -357,7 +357,7 @@ buf_read_page_low(
   trx_t *const trx= thd ? thd_to_trx(thd) : nullptr;
   if (exist)
   {
-    ut_ad(!init_page_result.ext_buf_page);
+    ut_ad(!init_page_result.ext_read);
     if (!err)
     {
       bpage->unfix();
@@ -397,26 +397,27 @@ buf_read_page_low(
 
   void* dst= zip_size > 1 ? bpage->zip.data : bpage->frame;
   const size_t len= zip_size & ~1 ? zip_size & ~1 : srv_page_size;
-  /* Synchronous read */
+
   if (err != nullptr)
   {
+    /* Synchronous read */
     thd_wait_begin(thd, THD_WAIT_DISKIO);
     ha_handler_stats *const stats= trx ? trx->active_handler_stats : nullptr;
     const ulonglong start= stats ? mariadb_measure() : 0;
     auto fio=
-        init_page_result.in_ext_buffer_pool()
+        init_page_result.ext_read
             ? fil_io_t{fil_system.ext_bp_io(
-                           *bpage, *init_page_result.ext_buf_page,
+                           *bpage, *init_page_result.ext_read,
                            IORequest::READ_SYNC, nullptr, len, dst),
                        nullptr}
             : space->io(IORequest(IORequest::READ_SYNC),
                         os_offset_t{page_id.page_no()} * len, len, dst, bpage);
     *err= fio.err;
     thd_wait_end(thd);
-    if (init_page_result.in_ext_buffer_pool())
+    if (init_page_result.ext_read)
     {
       mysql_mutex_lock(&buf_pool.mutex);
-      buf_pool.free_ext_page(*init_page_result.ext_buf_page);
+      buf_pool.free_ext_page(*init_page_result.ext_read);
       mysql_mutex_unlock(&buf_pool.mutex);
     }
     if (stats)
@@ -427,21 +428,28 @@ buf_read_page_low(
     }
     if (UNIV_LIKELY(*err == DB_SUCCESS))
     {
-      *err= bpage->read_complete(init_page_result.in_ext_buffer_pool()
+      *err= bpage->read_complete(init_page_result.ext_read
                                      ? *UT_LIST_GET_FIRST(space->chain)
                                      : *fio.node,
                                  recv_sys.recovery_on);
       if (*err)
         bpage= nullptr;
       space->release();
-      if (init_page_result.in_ext_buffer_pool())
+      if (init_page_result.ext_read)
       {
-        ut_d(if (DBUG_IF("ib_ext_bp_count_io_only_for_t")) {
-          auto space_name= space->name();
-          if (space_name.data() &&
-              !strncmp(space_name.data(), "test/t.ibd", space_name.size()))
-            ++buf_pool.stat.n_pages_read_from_ebp;
-        } else)++ buf_pool.stat.n_pages_read_from_ebp;
+        do
+        {
+#ifndef DBUG_OFF
+          if (DBUG_IF("ib_ext_bp_count_io_only_for_t"))
+          {
+            auto space_name= space->name();
+            if (!space_name.data() ||
+                strncmp(space_name.data(), "test/t.ibd", space_name.size()))
+              continue;
+          }
+#endif
+          ++buf_pool.stat.n_pages_read_from_ebp;
+        } while (false);
       }
       /* FIXME: Remove this, and accumulate stats->pages_read_count to
       global statistics somewhere! */
@@ -449,9 +457,9 @@ buf_read_page_low(
       return bpage;
     }
   }
-  else if (init_page_result.in_ext_buffer_pool())
+  else if (init_page_result.ext_read)
   {
-    auto err= fil_system.ext_bp_io(*bpage, *init_page_result.ext_buf_page,
+    auto err= fil_system.ext_bp_io(*bpage, *init_page_result.ext_read,
                                    IORequest::READ_ASYNC, nullptr, len, dst);
     space->release();
     DBUG_EXECUTE_IF("ib_ext_bp_read_io_error", { err= DB_IO_ERROR; });
@@ -906,9 +914,9 @@ void buf_read_recover(fil_space_t *space, const page_id_t page_id,
 
   if (init_lsn)
   {
-    auto init_page_result=
-        buf_page_init_for_read(page_id, zip_size, chain, block);
-    ut_ad(!init_page_result.ext_buf_page);
+    const page_init_result init_page_result=
+      buf_page_init_for_read(page_id, zip_size, chain, block);
+    ut_ad(!init_page_result.ext_read);
     buf_page_t *bpage= init_page_result.bpage;
     if (UNIV_UNLIKELY(!bpage))
       goto fail;

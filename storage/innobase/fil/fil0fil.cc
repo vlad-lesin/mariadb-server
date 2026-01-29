@@ -2946,7 +2946,7 @@ bool fil_system_t::create_ext_file() noexcept
   {
     sql_print_error("Cannot open/create extended buffer pool file '%s'", path);
     /* Report OS error in error log */
-    (void) os_file_get_last_error(true, false);
+    std::ignore= os_file_get_last_error(true, false);
     return false;
   }
   ut_ad(ext_bp_file != OS_FILE_CLOSED);
@@ -3005,7 +3005,12 @@ void IORequest::write_complete(int io_error) const noexcept
         slot->release();
       ut_d(auto debug_page_no = buf_page->id().page_no());
       /* We must hold buf_pool.mutex while releasing the block, so that
-      no other thread can access it before we have freed it. */
+      no other thread can access it before we have freed it.
+      FIXME: The logic was copied from the code in buf_page_write_complete()
+      for temporary tables. This would be an obvious performance bottleneck us
+      when there is some write activity to the external buffer pool going on.
+      Implement deferred, batched freeing, similar to the one we do in the
+      normal LRU flushing/eviction in the page cleaner thread. */
       mysql_mutex_lock(&buf_pool.mutex);
       buf_page->write_complete_release(buf_page->state());
       buf_LRU_free_page(buf_page, true, ext_buf_page());
@@ -3040,7 +3045,8 @@ void IORequest::write_complete(int io_error) const noexcept
     else
       ut_ad(type == IORequest::WRITE_ASYNC);
   }
-  else {
+  else
+  {
     DBUG_EXECUTE_IF(
         "ib_ext_bp_write_io_error", if (ext_buf()) { io_error= 1; });
     buf_page_write_complete(*this, io_error);
@@ -3058,8 +3064,8 @@ void IORequest::read_complete(int io_error) const noexcept
   ut_ad(fil_validate_skip());
   ut_ad(node_ptr);
   ut_ad(is_read());
-  ut_ad(bpage());
-  ut_d(auto s= bpage()->state());
+  ut_ad(buf_page);
+  ut_d(auto s= buf_page->state());
   ut_ad(s > buf_page_t::READ_FIX);
   ut_ad(s <= buf_page_t::WRITE_FIX);
 
@@ -3075,6 +3081,10 @@ void IORequest::read_complete(int io_error) const noexcept
     DBUG_EXECUTE_IF("ib_ext_bp_remove_space_on_read_complete",
                     space= nullptr;);
     if (!space) {
+      /* space is not holded for the duration of async IO for external buffer
+      pool pages, that's why if some space was wiped out, while it's page was
+      in the queue to external buffer pool file, it can't be considered as
+      error. We evict such page, but don't mark it as corrupted. */
       buf_pool.corrupted_evict(buf_page, buf_page_t::READ_FIX + 1, false);
       DBUG_EXECUTE_IF(
           "ib_ext_bp_remove_space_on_read_complete", if (debug_space) {
@@ -3126,12 +3136,12 @@ void IORequest::read_complete(int io_error) const noexcept
       mysql_mutex_unlock(&recv_sys.mutex);
     }
   }
-  else if (bpage()->read_complete(ext_buf() ? *UT_LIST_GET_FIRST(space->chain)
-                                          : *node_ptr,
-                                in_recovery))
+  else if (buf_page->read_complete(ext_buf() ? *UT_LIST_GET_FIRST(space->chain)
+                                             : *node_ptr,
+                                   in_recovery))
     goto corrupted;
   else
-    bpage()->unfix();
+    buf_page->unfix();
 
   space->release();
 }

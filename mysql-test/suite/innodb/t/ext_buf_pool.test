@@ -99,12 +99,12 @@ while($i) {
   SELECT variable_value INTO @prev_flushed_gs
     FROM information_schema.global_status
     WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_PAGES_FLUSHED';
-  SELECT NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL INTO @prev_written_ps
+  SELECT PAGES_EXTERNALLY_WRITTEN INTO @prev_written_ps
     FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
   SELECT variable_value INTO @prev_reads_gs
     FROM information_schema.global_status
     WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_READS';
-  SELECT NUMBER_PAGES_READ_FROM_EXTERNAL_BUFFER_POOL INTO @prev_reads_ps
+  SELECT PAGES_EXTERNALLY_READ INTO @prev_reads_ps
     FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 
   --eval SET @start_val = $i*100
@@ -136,12 +136,12 @@ while($i) {
   SELECT variable_value-@prev_flushed_gs
     FROM information_schema.global_status
     WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_PAGES_FLUSHED';
-  SELECT NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL-@prev_written_ps
+  SELECT PAGES_EXTERNALLY_WRITTEN-@prev_written_ps
     FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
   SELECT variable_value-@prev_reads_gs
     FROM information_schema.global_status
     WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_READS';
-  SELECT NUMBER_PAGES_READ_FROM_EXTERNAL_BUFFER_POOL-@prev_reads_ps
+  SELECT PAGES_EXTERNALLY_READ-@prev_reads_ps
     FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 
   SELECT * FROM t;
@@ -149,12 +149,12 @@ while($i) {
   SELECT variable_value-@prev_flushed_gs
     FROM information_schema.global_status
     WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_PAGES_FLUSHED';
-  SELECT NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL-@prev_written_ps
+  SELECT PAGES_EXTERNALLY_WRITTEN-@prev_written_ps
     FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
   SELECT variable_value-@prev_reads_gs
     FROM information_schema.global_status
     WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_READS';
-  SELECT NUMBER_PAGES_READ_FROM_EXTERNAL_BUFFER_POOL-@prev_reads_ps
+  SELECT PAGES_EXTERNALLY_READ-@prev_reads_ps
     FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 
   # Load buffer pool doesn't work for encrypted pages, compressed pages
@@ -233,7 +233,7 @@ while($i) {
   SELECT variable_value INTO @prev_flushed_gs
     FROM information_schema.global_status
     WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_PAGES_FLUSHED';
-  SELECT NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL INTO @prev_written_ps
+  SELECT PAGES_EXTERNALLY_WRITTEN INTO @prev_written_ps
     FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 
   SET GLOBAL DEBUG_DBUG='+d,ib_ext_bp_remove_space_on_write_complete';
@@ -262,7 +262,7 @@ while($i) {
   SELECT variable_value-@prev_flushed_gs
     FROM information_schema.global_status
     WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_PAGES_FLUSHED';
-  SELECT NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL-@prev_written_ps
+  SELECT PAGES_EXTERNALLY_WRITTEN-@prev_written_ps
     FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 
   SET GLOBAL DEBUG_DBUG='-d,ib_ext_bp_remove_space_on_write_complete';
@@ -285,7 +285,7 @@ CREATE TABLE t (`a` INT NOT NULL, PRIMARY KEY (`a`))
 SELECT variable_value INTO @prev_flushed_gs
   FROM information_schema.global_status
   WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_PAGES_FLUSHED';
-SELECT NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL INTO @prev_written_ps
+SELECT PAGES_EXTERNALLY_WRITTEN INTO @prev_written_ps
   FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 
 SET @start_val= 0; 
@@ -312,7 +312,7 @@ SET GLOBAL DEBUG_DBUG='-d,ib_ext_bp_write_io_error';
 SELECT variable_value-@prev_flushed_gs
   FROM information_schema.global_status
   WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_PAGES_FLUSHED';
-SELECT NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL-@prev_written_ps
+SELECT PAGES_EXTERNALLY_WRITTEN-@prev_written_ps
   FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 
 SELECT @@GLOBAL.INNODB_EXTENDED_BUFFER_POOL_SIZE;
@@ -333,7 +333,7 @@ SELECT @@GLOBAL.INNODB_EXTENDED_BUFFER_POOL_SIZE;
 #SELECT variable_value INTO @prev_flushed_gs
 #  FROM information_schema.global_status
 #  WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_PAGES_FLUSHED';
-#SELECT NUMBER_PAGES_WRITTEN_TO_EXTERNAL_BUFFER_POOL INTO @prev_written_ps
+#SELECT PAGES_EXTERNALLY_WRITTEN INTO @prev_written_ps
 #  FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 #
 #SET @start_val= 100; 
@@ -363,7 +363,7 @@ SELECT @@GLOBAL.INNODB_EXTENDED_BUFFER_POOL_SIZE;
 #SELECT variable_value INTO @prev_reads_gs
 #  FROM information_schema.global_status
 #  WHERE variable_name LIKE 'INNODB_EXT_BUFFER_POOL_READS';
-#SELECT NUMBER_PAGES_READ_FROM_EXTERNAL_BUFFER_POOL INTO @prev_reads_ps
+#SELECT PAGES_EXTERNALLY_READ INTO @prev_reads_ps
 #  FROM INFORMATION_SCHEMA.INNODB_BUFFER_POOL_STATS;
 #
 #SET GLOBAL DEBUG_DBUG='+d,ib_ext_bp_read_io_error';

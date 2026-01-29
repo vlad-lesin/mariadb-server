@@ -109,7 +109,7 @@ the object will be freed.
 @param id           page identifier
 @param chain        locked buf_pool.page_hash chain (will be released here)
 @param zip          whether bpage->zip of BUF_BLOCK_FILE_PAGE should be freed
-@param ext_buf_page external buffer page to replace bpage in page hash
+@param ext_page     external buffer page to replace bpage in buf_pool.page_hash
 
 If a compressed page is freed other compressed pages may be relocated.
 @retval true if bpage with bpage->frame was removed from page_hash. The
@@ -119,7 +119,7 @@ this case the block is already returned to the buddy allocator. */
 static bool buf_LRU_block_remove_hashed(buf_page_t *bpage, const page_id_t id,
                                         buf_pool_t::hash_chain &chain,
                                         bool zip,
-                                        ext_buf_page_t *ext_buf_page= nullptr);
+                                        ext_buf_page_t *ext_page);
 
 /** Free a block to buf_pool */
 static void buf_LRU_block_free_hashed_page(buf_block_t *block)
@@ -736,12 +736,11 @@ ROW_FORMAT=COMPRESSED page, the buf_page_t object will be freed as well.
 The caller must hold buf_pool.mutex.
 @param bpage      block to be freed
 @param zip        whether to remove both copies of a ROW_FORMAT=COMPRESSED page
-@param ext_buf_page pointer to external buffer pool page to replace with bpage
-                    in page hash
+@param ext_page   external buffer page to replace bpage in buf_pool.page_hash
 @retval true if freed and buf_pool.mutex may have been temporarily released
 @retval false if the page was not freed */
 bool buf_LRU_free_page(buf_page_t *bpage, bool zip,
-                       ext_buf_page_t *ext_buf_page)
+                       ext_buf_page_t *ext_page)
 {
 	const page_id_t id{bpage->id()};
 	buf_page_t*	b = nullptr;
@@ -825,7 +824,7 @@ func_exit:
 
 	ut_ad(bpage->can_relocate());
 
-	if (!buf_LRU_block_remove_hashed(bpage, id, chain, zip, ext_buf_page)) {
+	if (!buf_LRU_block_remove_hashed(bpage, id, chain, zip, ext_page)) {
 		ut_ad(!b);
 		mysql_mutex_assert_not_owner(&buf_pool.flush_list_mutex);
 		return(true);
@@ -1024,7 +1023,7 @@ If !bpage->frame && !bpage->oldest_modification(), the object will be freed.
 @param id         page identifier
 @param chain      locked buf_pool.page_hash chain (will be released here)
 @param zip        whether bpage->zip of BUF_BLOCK_FILE_PAGE should be freed
-@param ext_buf_page external buffer page to replace bpage in page hash
+@param ext_page   external buffer page to replace bpage in buf_pool.page_hash
 
 If a compressed page is freed other compressed pages may be relocated.
 @retval true if BUF_BLOCK_FILE_PAGE was removed from page_hash. The
@@ -1034,7 +1033,7 @@ this case the block is already returned to the buddy allocator. */
 static bool buf_LRU_block_remove_hashed(buf_page_t *bpage, const page_id_t id,
                                         buf_pool_t::hash_chain &chain,
                                         bool zip,
-                                        ext_buf_page_t *ext_buf_page)
+                                        ext_buf_page_t *ext_page)
 {
 	ut_a(bpage->can_relocate());
 	ut_ad(buf_pool.page_hash.lock_get(chain).is_write_locked());
@@ -1098,12 +1097,12 @@ static bool buf_LRU_block_remove_hashed(buf_page_t *bpage, const page_id_t id,
 		MEM_CHECK_ADDRESSABLE(bpage->zip.data, bpage->zip_size());
 	}
 
-	if (ext_buf_page) {
-		buf_pool.push_ext_page_to_LRU(*ext_buf_page);
-		ut_ad(ext_buf_page->id_ == bpage->id());
-		ext_buf_page->hash= bpage->hash;
+	if (ext_page) {
+		buf_pool.push_ext_page_to_LRU(*ext_page);
+		ut_ad(ext_page->id_ == bpage->id());
+		ext_page->hash= bpage->hash;
 		buf_pool.page_hash.replace(chain, bpage,
-		    reinterpret_cast<buf_page_t *>(ext_buf_page));
+		    reinterpret_cast<buf_page_t *>(ext_page));
 	}
 	else
 		buf_pool.page_hash.remove(chain, bpage);
@@ -1188,7 +1187,7 @@ void buf_pool_t::corrupted_evict(buf_page_t *bpage, uint32_t state,
   }
 
   /* remove from LRU and page_hash */
-  if (buf_LRU_block_remove_hashed(bpage, id, chain, true))
+  if (buf_LRU_block_remove_hashed(bpage, id, chain, true, nullptr))
     buf_LRU_block_free_hashed_page(reinterpret_cast<buf_block_t*>(bpage));
 
   mysql_mutex_unlock(&mutex);
